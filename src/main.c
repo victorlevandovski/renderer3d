@@ -1,3 +1,5 @@
+#include <stdlib.h>
+#include <stdio.h>
 #include "fenster.h"
 #include "lib/fenster_ext.h"
 

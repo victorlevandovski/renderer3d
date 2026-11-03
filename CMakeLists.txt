@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 3.16)
 
+if(APPLE)
+    execute_process(
+            COMMAND xcrun --sdk macosx --show-sdk-path
+            OUTPUT_VARIABLE MACOS_SDK
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    set(CMAKE_OSX_SYSROOT "${MACOS_SDK}" CACHE PATH "macOS SDK")
+endif()
+
 project(renderer3d LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
@@ -19,6 +28,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 if(APPLE)
+    target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+        "${CMAKE_OSX_SYSROOT}/usr/include"
+    )
     target_link_libraries(${PROJECT_NAME} PRIVATE
         "-framework Cocoa"
         "-framework AudioToolbox"
