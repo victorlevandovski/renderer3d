@@ -1,40 +1,43 @@
 #include <stdlib.h>
 #include <stdio.h>
+
 #include "fenster.h"
 #include "lib/fenster_ext.h"
 
-#define W 1280
+#define W 800
 #define H 800
 
-int main() {
+int main()
+{
     uint32_t buf[W * H];
-    struct fenster f = { .title = "hello", .width = W, .height = H, .buf = buf };
+    struct fenster f = { .title = "renderer3d", .width = W, .height = H, .buf = buf };
     fenster_open(&f);
     
-    int64_t last = fenster_time();
-    int frames = 0;
-    double fps = 0;
-    
+    int accu = 0;
+    int64_t last = 0;
+    int64_t prev = fenster_time();
+    char text[32];
+
     while (fenster_loop(&f) == 0) {
-        for (int i = 0; i < W; i++) {
-            for (int j = 0; j < H; j++) {
-                fenster_pixel(&f, i, j) = rand();
-            }
-        }
-        
         int64_t now = fenster_time();
-        int64_t dt = now - last;
-        frames++;
-        
-        if (dt >= 1000) {
-            fps = frames * 1000.0 / dt;
-            frames = 0;
+        double delta_time = (double) (now - prev) * 0.001;
+
+        if (f.keys[27])
+            break;
+
+        memset(f.buf, 0, f.width * f.height * sizeof(uint32_t));
+
+        // draw here...
+
+        if (now - last > 999) {
             last = now;
+            snprintf(text, sizeof(text), "FPS: %d", accu);
+            accu = 0;
         }
-        
-        char text[32];
-        snprintf(text, sizeof(text), "FPS: %.0f", fps);
         fenster_text(&f, 8, 8, text, 2, 0xffffff);
+
+        accu += 1;
+        prev = now;
     }
     
     fenster_close(&f);
