@@ -21,8 +21,16 @@ file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
+add_custom_command(TARGET renderer3d POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:renderer3d>/assets"
+        COMMENT "Copying assets"
+)
+
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_SOURCE_DIR}/vendor/fenster"
+    "${CMAKE_SOURCE_DIR}/vendor/fast_obj"
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/lib"
 )

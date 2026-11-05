@@ -1,3 +1,5 @@
+#pragma once
+
 #include "fenster.h"
 
 static void fenster_line(struct fenster *f, int x0, int y0, int x1, int y1, uint32_t c)
