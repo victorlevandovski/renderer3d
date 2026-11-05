@@ -40,6 +40,7 @@ typedef struct {
 } Vec3f;
 
 extern Vec2 VEC2_ZERO;
+extern Vec3 VEC3_ZERO;
 
 Vec2 vec2_add(Vec2 v1, Vec2 v2);
 Vec2 vec2_subtract(Vec2 v1, Vec2 v2);
@@ -51,6 +52,8 @@ double vec2_length(Vec2 v);
 double vec2_distance(Vec2 v1, Vec2 v2);
 double vec2_angle(Vec2 v);
 double vec2_acute_angle(Vec2 v1, Vec2 v2);
+
+double vec3_length(Vec3 v);
 
 double remap(double source_from, double source_to, double destination_from, double destination_to, double value);
 float remapf(float source_from, float source_to, float destination_from, float destination_to, float value);

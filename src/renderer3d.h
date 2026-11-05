@@ -2,12 +2,15 @@
 
 #include "lib/lib_math.h"
 
+#define MESH_LIST_MAX_MESHES 1024
+#define RENDER_LIST_MAX_TRIANGLES 32768
+
 typedef struct {
     uint32_t *buffer;
     int width;
     int height;
-    int half_width;
-    int half_height;
+    int width_2;
+    int height_2;
 } Screen;
 
 typedef struct {
@@ -15,24 +18,52 @@ typedef struct {
     Vec3 normal;
     Vec2 uv;
     int attributes;
-} Ver;
+} Vertex;
 
 typedef struct {
-    Ver vertices[3];
+    Vertex vertices[3];
     Vec3 normal;
     int attributes;
-} Tri;
+} Triangle;
+
+typedef struct {
+    Vec3 position;
+    double rotation;
+    double scale;
+} Transform;
+
+extern Transform TRANSFORM_ZERO;
 
 typedef struct {
     int id;
-    Tri *triangles_local;
-    Tri *triangles_transformed;
+    Triangle *triangles_local;
+    Triangle *triangles_transformed;
     unsigned int num_triangles;
-    double rotation; // around Z axis, rad
+    Transform transform;
     double radius;
     int attributes;
 } Mesh;
 
+typedef struct {
+    Mesh *meshes[MESH_LIST_MAX_MESHES];
+    unsigned int num_meshes;
+} MeshList;
+
+typedef struct {
+    Triangle *triangles[RENDER_LIST_MAX_TRIANGLES];
+    unsigned int num_triangles;
+} RenderList;
+
+typedef struct {
+    Transform transform;
+    double focal_length;
+    double near_plane;
+    double far_plane;
+} Camera;
+
 Mesh* renderer3d_load_mesh(char* filename);
+
+RenderList* renderer3d_compute_render_list(MeshList *mesh_list, Camera *camera);
+void renderer3d_render(RenderList *render_list, Screen *screen);
 
 void renderer3d_render_mesh(Mesh *mesh, Screen *screen);

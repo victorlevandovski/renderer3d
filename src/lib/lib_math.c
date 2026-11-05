@@ -4,6 +4,7 @@
 #include <math.h>
 
 Vec2 VEC2_ZERO = {0.0, 0.0};
+Vec3 VEC3_ZERO = {0.0, 0.0, 0.0};
 
 int sign(double value)
 {
@@ -81,6 +82,11 @@ double vec2_acute_angle(Vec2 v1, Vec2 v2)
     sin_theta = fmin(fmax(sin_theta, 0.0), 1.0);
 
     return asin(sin_theta);
+}
+
+double vec3_length(Vec3 v)
+{
+    return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
 double remap(double source_from, double source_to, double destination_from, double destination_to, double value)

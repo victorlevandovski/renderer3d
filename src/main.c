@@ -19,8 +19,8 @@ int main()
     screen.buffer = f.buf;
     screen.width = SCREEN_W;
     screen.height = SCREEN_H;
-    screen.half_width = SCREEN_W / 2;
-    screen.half_height = SCREEN_H / 2;
+    screen.width_2 = SCREEN_W / 2;
+    screen.height_2 = SCREEN_H / 2;
     
     int accu = 0;
     int64_t last = 0;
@@ -28,6 +28,9 @@ int main()
     char text[32];
 
     Mesh *mesh = renderer3d_load_mesh("assets/sphere.obj");
+
+    mesh->transform.position.y = 1000;
+    mesh->transform.scale = 500;
 
     while (fenster_loop(&f) == 0) {
         int64_t now = fenster_time();
@@ -38,9 +41,9 @@ int main()
 
         memset(f.buf, 0, f.width * f.height * sizeof(uint32_t));
 
-        mesh->rotation += delta_time * 0.1;
-        if (mesh->rotation > M_PI * 2)
-            mesh->rotation -= M_PI * 2;
+        mesh->transform.rotation += delta_time * 0.1;
+        if (mesh->transform.rotation > M_PI * 2)
+            mesh->transform.rotation -= M_PI * 2;
 
         renderer3d_render_mesh(mesh, &screen);
 
