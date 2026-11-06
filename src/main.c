@@ -27,10 +27,33 @@ int main()
     int64_t prev = fenster_time();
     char text[32];
 
-    Mesh *mesh = renderer3d_load_mesh("assets/sphere.obj");
+    Mesh *cube_mesh = renderer3d_load_mesh("assets/cube.obj");
+    cube_mesh->transform.position.x = 65;
+    cube_mesh->transform.position.y = 400;
+    cube_mesh->transform.scale = 100;
+    cube_mesh->state = 1;
 
-    mesh->transform.position.y = 1000;
-    mesh->transform.scale = 500;
+    Mesh *sphere_mesh = renderer3d_load_mesh("assets/sphere.obj");
+    sphere_mesh->transform.position.x = -65;
+    sphere_mesh->transform.position.y = 400;
+    sphere_mesh->transform.scale = 100;
+    sphere_mesh->state = 1;
+
+    MeshList mesh_list = {
+        .meshes = {cube_mesh, sphere_mesh},
+        .num_meshes = 2
+    };
+
+    Camera camera = {
+        .transform = TRANSFORM_ZERO,
+        .focal_length = 300,
+        .near_plane = 0.1,
+        .far_plane = 1000,
+    };
+
+    camera.transform.rotation = M_PI_2;
+
+    RenderList *render_list = malloc(sizeof(RenderList));
 
     while (fenster_loop(&f) == 0) {
         int64_t now = fenster_time();
@@ -41,11 +64,11 @@ int main()
 
         memset(f.buf, 0, f.width * f.height * sizeof(uint32_t));
 
-        mesh->transform.rotation += delta_time * 0.1;
-        if (mesh->transform.rotation > M_PI * 2)
-            mesh->transform.rotation -= M_PI * 2;
+        cube_mesh->transform.rotation += delta_time * 0.5;
+        sphere_mesh->transform.rotation -= delta_time * 0.5;
 
-        renderer3d_render_mesh(mesh, &screen);
+        renderer3d_compute_render_list(render_list, &mesh_list, &camera);
+        renderer3d_render(render_list, &screen);
 
         if (now - last > 999) {
             last = now;

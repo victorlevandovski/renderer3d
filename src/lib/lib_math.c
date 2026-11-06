@@ -21,19 +21,19 @@ double vec2_length(Vec2 v)
     return sqrt(v.x * v.x + v.y * v.y);
 }
 
-double vec2_distance(Vec2 v1, Vec2 v2)
+double vec2_distance(Vec2 a, Vec2 b)
 {
-    return sqrt(pow(v2.x - v1.x, 2.0) + pow(v2.y - v1.y, 2.0));
+    return sqrt(pow(b.x - a.x, 2.0) + pow(b.y - a.y, 2.0));
 }
 
-Vec2 vec2_add(Vec2 v1, Vec2 v2)
+Vec2 vec2_add(Vec2 a, Vec2 b)
 {
-    return (Vec2) {v1.x + v2.x, v1.y + v2.y};
+    return (Vec2) {a.x + b.x, a.y + b.y};
 }
 
-Vec2 vec2_subtract(Vec2 v1, Vec2 v2)
+Vec2 vec2_subtract(Vec2 a, Vec2 b)
 {
-    return (Vec2) {v1.x - v2.x, v1.y - v2.y};
+    return (Vec2) {a.x - b.x, a.y - b.y};
 }
 
 Vec2 vec2_multiply(Vec2 v, double multiplier)
@@ -69,9 +69,9 @@ double vec2_angle(Vec2 v)
     return a;
 }
 
-double vec2_acute_angle(Vec2 v1, Vec2 v2)
+double vec2_acute_angle(Vec2 a, Vec2 b)
 {
-    double len_product = vec2_length(v1) * vec2_length(v2);
+    double len_product = vec2_length(a) * vec2_length(b);
 
     if (len_product == 0.0)
         return 0.0;
@@ -84,9 +84,46 @@ double vec2_acute_angle(Vec2 v1, Vec2 v2)
     return asin(sin_theta);
 }
 
+Vec3 vec3_add(Vec3 a, Vec3 b)
+{
+    return (Vec3) { a.x + b.x, a.y + b.y, a.z + b.z };
+}
+
+Vec3 vec3_normalize(Vec3 v)
+{
+    double length = vec3_length(v);
+    return (Vec3) {v.x / length, v.y / length, v.z / length};
+}
+
+Vec3 vec3_rotate_z(Vec3 v, double angle)
+{
+    double s = sin(angle);
+    double c = cos(angle);
+    return (Vec3) { v.x * c - v.y * s, v.x * s + v.y * c, v.z };
+}
+
+Vec3 vec3_average(Vec3 a, Vec3 b, Vec3 c)
+{
+    return (Vec3) {
+        .x = (a.x + b.x + c.x) / 3.0,
+        .y = (a.y + b.y + c.y) / 3.0,
+        .z = (a.z + b.z + c.z) / 3.0
+    };
+}
+
 double vec3_length(Vec3 v)
 {
     return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+double vec3_dot(Vec3 a, Vec3 b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+double vec3_angle(Vec3 a, Vec3 b)
+{
+    return acos(vec3_dot(a, b) / (vec3_length(a) * vec3_length(b)));
 }
 
 double remap(double source_from, double source_to, double destination_from, double destination_to, double value)

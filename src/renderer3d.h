@@ -41,6 +41,7 @@ typedef struct {
     unsigned int num_triangles;
     Transform transform;
     double radius;
+    int state;
     int attributes;
 } Mesh;
 
@@ -63,7 +64,5 @@ typedef struct {
 
 Mesh* renderer3d_load_mesh(char* filename);
 
-RenderList* renderer3d_compute_render_list(MeshList *mesh_list, Camera *camera);
+int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera);
 void renderer3d_render(RenderList *render_list, Screen *screen);
-
-void renderer3d_render_mesh(Mesh *mesh, Screen *screen);
