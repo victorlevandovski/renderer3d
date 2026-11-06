@@ -116,12 +116,14 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
     for (int m = 0; m < mesh_list->num_meshes; m++) {
         if (!mesh_list->meshes[m]->state)
             continue;
+
         renderer3d_transform_mesh_triangles(mesh_list->meshes[m]);
+
         for (int t = 0; t < mesh_list->meshes[m]->num_triangles; t++) {
             Vec3 triangle_average = vec3_average(
                 mesh_list->meshes[m]->triangles_transformed[t].vertices[0].vertex,
-                mesh_list->meshes[m]->triangles_transformed[t].vertices[0].vertex,
-                mesh_list->meshes[m]->triangles_transformed[t].vertices[0].vertex
+                mesh_list->meshes[m]->triangles_transformed[t].vertices[1].vertex,
+                mesh_list->meshes[m]->triangles_transformed[t].vertices[2].vertex
             );
             Vec3 camera_normal = {
                 .x = camera->transform.position.x + triangle_average.x,
@@ -157,8 +159,8 @@ void renderer3d_render(RenderList *render_list, Screen *screen)
             f * render_list->triangles[i]->vertices[2].vertex.z / render_list->triangles[i]->vertices[2].vertex.y + screen->height_2
         };
 
-        render_line(screen, v1, v2, 0x669900);
-        render_line(screen, v2, v3, 0x669900);
-        render_line(screen, v1, v3, 0x669900);
+        render_line(screen, v1, v2, WIREFRAME_COLOR);
+        render_line(screen, v2, v3, WIREFRAME_COLOR);
+        render_line(screen, v1, v3, WIREFRAME_COLOR);
     }
 }
