@@ -42,6 +42,7 @@ typedef struct {
     Triangle *triangles_transformed;
     unsigned int num_triangles;
     Transform transform;
+    Transform transform_camera;
     double radius;
     int state;
     int attributes;
@@ -66,5 +67,6 @@ typedef struct {
 
 Mesh* renderer3d_load_mesh(char* filename);
 
+bool renderer3d_is_mesh_in_viewport(Mesh* mesh, Camera *camera);
 int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera);
 void renderer3d_render(RenderList *render_list, Screen *screen);

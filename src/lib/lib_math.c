@@ -89,13 +89,18 @@ Vec3 vec3_add(Vec3 a, Vec3 b)
     return (Vec3) { a.x + b.x, a.y + b.y, a.z + b.z };
 }
 
+Vec3 vec3_subtract(Vec3 a, Vec3 b)
+{
+    return (Vec3) { a.x - b.x, a.y - b.y, a.z - b.z };
+}
+
 Vec3 vec3_normalize(Vec3 v)
 {
     double length = vec3_length(v);
     return (Vec3) {v.x / length, v.y / length, v.z / length};
 }
 
-Vec3 vec3_rotate_z(Vec3 v, double angle)
+Vec3 vec3_rotate_xy(Vec3 v, double angle)
 {
     double s = sin(angle);
     double c = cos(angle);
@@ -124,6 +129,11 @@ double vec3_dot(Vec3 a, Vec3 b)
 double vec3_angle(Vec3 a, Vec3 b)
 {
     return acos(vec3_dot(a, b) / (vec3_length(a) * vec3_length(b)));
+}
+
+double vec3_angle_xy(Vec3 v)
+{
+    return atan2(v.y, v.x);
 }
 
 double remap(double source_from, double source_to, double destination_from, double destination_to, double value)

@@ -96,15 +96,22 @@ static void render_line(Screen *screen, Vec2i from, Vec2i to, uint32_t c)
     }
 }
 
-void renderer3d_transform_mesh_triangles(Mesh *mesh)
+void renderer3d_compute_mesh_camera_transform(Mesh *mesh, Camera *camera)
+{
+    Vec3 relative_position = vec3_subtract(mesh->transform.position, camera->transform.position);
+    mesh->transform_camera.position = vec3_rotate_xy(relative_position, -camera->transform.rotation - M_PI_2 * 3);
+}
+
+void renderer3d_transform_mesh_triangles(Mesh *mesh, Camera *camera)
 {
     for (int i = 0; i < mesh->num_triangles; i++) {
         for (int j = 0; j < 3; j++) {
-            Vec3 v = vec3_rotate_z(mesh->triangles_local[i].vertices[j].vertex, mesh->transform.rotation);
-            mesh->triangles_transformed[i].vertices[j].vertex.x = v.x * mesh->transform.scale + mesh->transform.position.x;
-            mesh->triangles_transformed[i].vertices[j].vertex.y = v.y * mesh->transform.scale + mesh->transform.position.y;
-            mesh->triangles_transformed[i].vertices[j].vertex.z = v.z * mesh->transform.scale + mesh->transform.position.z;
-            mesh->triangles_transformed[i].normal = vec3_rotate_z(mesh->triangles_local[i].normal, mesh->transform.rotation);
+            // camera->transform.rotation
+            Vec3 v = vec3_rotate_xy(mesh->triangles_local[i].vertices[j].vertex, mesh->transform.rotation - camera->transform.rotation);
+            mesh->triangles_transformed[i].vertices[j].vertex.x = v.x * mesh->transform.scale + mesh->transform_camera.position.x;
+            mesh->triangles_transformed[i].vertices[j].vertex.y = v.y * mesh->transform.scale + mesh->transform_camera.position.y;
+            mesh->triangles_transformed[i].vertices[j].vertex.z = v.z * mesh->transform.scale + mesh->transform_camera.position.z;
+            mesh->triangles_transformed[i].normal = vec3_rotate_xy(mesh->triangles_local[i].normal, mesh->transform.rotation - camera->transform.rotation);
         }
     }
 }
@@ -117,22 +124,19 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
         if (!mesh_list->meshes[m]->state)
             continue;
 
-        renderer3d_transform_mesh_triangles(mesh_list->meshes[m]);
+        renderer3d_compute_mesh_camera_transform(mesh_list->meshes[m], camera);
+        renderer3d_transform_mesh_triangles(mesh_list->meshes[m], camera);
 
         for (int t = 0; t < mesh_list->meshes[m]->num_triangles; t++) {
-            Vec3 triangle_average = vec3_average(
+            Vec3 camera_normal = vec3_average(
                 mesh_list->meshes[m]->triangles_transformed[t].vertices[0].vertex,
                 mesh_list->meshes[m]->triangles_transformed[t].vertices[1].vertex,
                 mesh_list->meshes[m]->triangles_transformed[t].vertices[2].vertex
             );
-            Vec3 camera_normal = {
-                .x = camera->transform.position.x + triangle_average.x,
-                .y = camera->transform.position.y + triangle_average.y,
-                .z = camera->transform.position.z + triangle_average.z
-            };
-            if (vec3_angle(camera_normal, mesh_list->meshes[m]->triangles_transformed[t].normal) > M_PI_2) {
-                render_list->triangles[num_triangles++] = &mesh_list->meshes[m]->triangles_transformed[t];
+            if (vec3_angle(camera_normal, mesh_list->meshes[m]->triangles_transformed[t].normal) <= M_PI_2) {
+                continue;
             }
+            render_list->triangles[num_triangles++] = &mesh_list->meshes[m]->triangles_transformed[t];
         }
     }
 

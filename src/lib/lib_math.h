@@ -54,12 +54,14 @@ double vec2_angle(Vec2 v);
 double vec2_acute_angle(Vec2 a, Vec2 b);
 
 Vec3 vec3_add(Vec3 a, Vec3 b);
+Vec3 vec3_subtract(Vec3 a, Vec3 b);
 Vec3 vec3_normalize(Vec3 v);
-Vec3 vec3_rotate_z(Vec3 v, double angle);
+Vec3 vec3_rotate_xy(Vec3 v, double angle);
 Vec3 vec3_average(Vec3 a, Vec3 b, Vec3 c);
 double vec3_length(Vec3 v);
 double vec3_dot(Vec3 a, Vec3 b);
 double vec3_angle(Vec3 a, Vec3 b);
+double vec3_angle_xy(Vec3 v);
 
 double remap(double source_from, double source_to, double destination_from, double destination_to, double value);
 float remapf(float source_from, float source_to, float destination_from, float destination_to, float value);
