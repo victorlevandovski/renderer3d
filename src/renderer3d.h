@@ -60,13 +60,12 @@ typedef struct {
 
 typedef struct {
     Transform transform;
-    double focal_length;
+    double fov;
     double near_plane;
-    double far_plane;
 } Camera;
 
 Mesh* renderer3d_load_mesh(char* filename);
 
 bool renderer3d_is_mesh_in_viewport(Mesh* mesh, Camera *camera);
 int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera);
-void renderer3d_render(RenderList *render_list, Screen *screen);
+void renderer3d_render(RenderList *render_list, Camera *camera, Screen *screen);

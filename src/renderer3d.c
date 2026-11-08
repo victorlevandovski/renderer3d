@@ -102,11 +102,27 @@ void renderer3d_compute_mesh_camera_transform(Mesh *mesh, Camera *camera)
     mesh->transform_camera.position = vec3_rotate_xy(relative_position, -camera->transform.rotation - M_PI_2 * 3);
 }
 
+bool renderer3d_is_mesh_in_viewport(Mesh* mesh, Camera *camera)
+{
+    // behind camera plane
+    if (mesh->transform_camera.position.y + mesh->radius < camera->near_plane)
+        return false;
+
+    // outside camera cone
+    double x = fabs(mesh->transform_camera.position.x);
+    double theta = fabs(camera->fov) * 0.5 * DEG2RAD;
+    double d_camera = mesh->transform_camera.position.y * tan(theta);
+    double d_mesh = (x - d_camera) * cos(theta);
+    if (d_mesh > mesh->radius)
+        return false;
+
+    return true;
+}
+
 void renderer3d_transform_mesh_triangles(Mesh *mesh, Camera *camera)
 {
     for (int i = 0; i < mesh->num_triangles; i++) {
         for (int j = 0; j < 3; j++) {
-            // camera->transform.rotation
             Vec3 v = vec3_rotate_xy(mesh->triangles_local[i].vertices[j].vertex, mesh->transform.rotation - camera->transform.rotation);
             mesh->triangles_transformed[i].vertices[j].vertex.x = v.x * mesh->transform.scale + mesh->transform_camera.position.x;
             mesh->triangles_transformed[i].vertices[j].vertex.y = v.y * mesh->transform.scale + mesh->transform_camera.position.y;
@@ -125,6 +141,10 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
             continue;
 
         renderer3d_compute_mesh_camera_transform(mesh_list->meshes[m], camera);
+
+        if (!renderer3d_is_mesh_in_viewport(mesh_list->meshes[m], camera))
+            continue;
+
         renderer3d_transform_mesh_triangles(mesh_list->meshes[m], camera);
 
         for (int t = 0; t < mesh_list->meshes[m]->num_triangles; t++) {
@@ -145,22 +165,23 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
     return num_triangles;
 }
 
-void renderer3d_render(RenderList *render_list, Screen *screen)
+void renderer3d_render(RenderList *render_list, Camera *camera, Screen *screen)
 {
-    double f = 1000;
+    double d = 1.0 / tan(camera->fov * DEG2RAD * 0.5);
+    d *= screen->height_2;
 
     for (int i = 0; i < render_list->num_triangles; i++) {
         Vec2i v1 = {
-            f * render_list->triangles[i]->vertices[0].vertex.x / render_list->triangles[i]->vertices[0].vertex.y + screen->width_2,
-            f * render_list->triangles[i]->vertices[0].vertex.z / render_list->triangles[i]->vertices[0].vertex.y + screen->height_2
+            d * render_list->triangles[i]->vertices[0].vertex.x / render_list->triangles[i]->vertices[0].vertex.y + screen->width_2,
+            d * render_list->triangles[i]->vertices[0].vertex.z / render_list->triangles[i]->vertices[0].vertex.y + screen->height_2
         };
         Vec2i v2 = {
-            f * render_list->triangles[i]->vertices[1].vertex.x / render_list->triangles[i]->vertices[1].vertex.y + screen->width_2,
-            f * render_list->triangles[i]->vertices[1].vertex.z / render_list->triangles[i]->vertices[1].vertex.y + screen->height_2
+            d * render_list->triangles[i]->vertices[1].vertex.x / render_list->triangles[i]->vertices[1].vertex.y + screen->width_2,
+            d * render_list->triangles[i]->vertices[1].vertex.z / render_list->triangles[i]->vertices[1].vertex.y + screen->height_2
         };
         Vec2i v3 = {
-            f * render_list->triangles[i]->vertices[2].vertex.x / render_list->triangles[i]->vertices[2].vertex.y + screen->width_2,
-            f * render_list->triangles[i]->vertices[2].vertex.z / render_list->triangles[i]->vertices[2].vertex.y + screen->height_2
+            d * render_list->triangles[i]->vertices[2].vertex.x / render_list->triangles[i]->vertices[2].vertex.y + screen->width_2,
+            d * render_list->triangles[i]->vertices[2].vertex.z / render_list->triangles[i]->vertices[2].vertex.y + screen->height_2
         };
 
         render_line(screen, v1, v2, WIREFRAME_COLOR);

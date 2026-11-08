@@ -48,15 +48,14 @@ int main()
 
     Camera camera = {
         .transform = TRANSFORM_ZERO,
-        .focal_length = 300,
+        .fov = 33.0,
         .near_plane = 0.1,
-        .far_plane = 1000,
     };
 
     camera.transform.rotation = 0.0;
 
     double camera_speed = 1.0;
-    double camera_rotation_speed = 1.0; // rad/s
+    double camera_rotation_speed = 0.5; // rad/s
 
     RenderList *render_list = malloc(sizeof(RenderList));
 
@@ -93,7 +92,7 @@ int main()
         sphere_mesh->transform.rotation -= delta_time * 0.5;
 
         renderer3d_compute_render_list(render_list, &mesh_list, &camera);
-        renderer3d_render(render_list, &screen);
+        renderer3d_render(render_list, &camera, &screen);
 
         snprintf(label_stats, sizeof(label_stats), "TRIS: %d", render_list->num_triangles);
         fenster_text(&f, 8, 24, label_stats, 2, 0x666666);
