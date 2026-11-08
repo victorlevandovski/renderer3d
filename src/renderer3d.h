@@ -3,6 +3,7 @@
 #include "lib/lib_math.h"
 
 #define MESH_LIST_MAX_MESHES 1024
+#define LIGHT_LIST_MAX_LIGHTS 4
 #define RENDER_LIST_MAX_TRIANGLES 32768
 
 #define WIREFRAME_COLOR 0x7744bb
@@ -54,6 +55,18 @@ typedef struct {
 } MeshList;
 
 typedef struct {
+    Transform transform;
+    Transform transform_camera;
+    double brightness;
+    int state;
+} Light;
+
+typedef struct {
+    Light *lights[LIGHT_LIST_MAX_LIGHTS];
+    unsigned int num_lights;
+} LightList;
+
+typedef struct {
     Triangle *triangles[RENDER_LIST_MAX_TRIANGLES];
     unsigned int num_triangles;
 } RenderList;
@@ -64,8 +77,15 @@ typedef struct {
     double near_plane;
 } Camera;
 
+typedef struct {
+    uint8_t r, g, b;
+} Col3i;
+
+extern Col3i COL3I_BLACK;
+extern Col3i COL3I_WHITE;
+
 Mesh* renderer3d_load_mesh(char* filename);
 
 bool renderer3d_is_mesh_in_viewport(Mesh* mesh, Camera *camera);
 int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera);
-void renderer3d_render(RenderList *render_list, Camera *camera, Screen *screen);
+void renderer3d_render(RenderList *render_list, LightList *light_list, Camera *camera, Screen *screen);

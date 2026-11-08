@@ -7,6 +7,18 @@
 
 #include <math.h>
 
+Col3i COL3I_BLACK = {
+    .r = 0,
+    .g = 0,
+    .b = 0,
+};
+
+Col3i COL3I_WHITE = {
+    .r = 255,
+    .g = 255,
+    .b = 255,
+};
+
 Transform TRANSFORM_ZERO = {
     .position = (Vec3) { .x = 0.0, .y = 0.0, .z = 0.0 },
     .rotation = 0.0,
@@ -126,6 +138,12 @@ void renderer3d_compute_mesh_camera_transform(Mesh *mesh, Camera *camera)
     mesh->transform_camera.position = vec3_rotate_xy(relative_position, -camera->transform.rotation - M_PI_2 * 3);
 }
 
+void renderer3d_compute_light_camera_transform(Light *light, Camera *camera)
+{
+    Vec3 relative_position = vec3_subtract(light->transform.position, camera->transform.position);
+    light->transform_camera.position = vec3_rotate_xy(relative_position, -camera->transform.rotation - M_PI_2 * 3);
+}
+
 bool renderer3d_is_mesh_in_viewport(Mesh* mesh, Camera *camera)
 {
     // behind camera plane
@@ -243,28 +261,85 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
     return num_triangles;
 }
 
-void renderer3d_render(RenderList *render_list, Camera *camera, Screen *screen)
+static double viewport_d;
+
+void renderer3d_rasterize_triangle_wireframe(Triangle *triangle, LightList *light_list, Camera *camera, Screen *screen)
 {
-    double d = 1.0 / tan(camera->fov * DEG2RAD * 0.5);
-    d *= screen->height_2;
+    Vec2i v1 = {
+        viewport_d * triangle->vertices[0].vertex.x / triangle->vertices[0].vertex.y + screen->width_2,
+        viewport_d * triangle->vertices[0].vertex.z / triangle->vertices[0].vertex.y + screen->height_2
+    };
+    Vec2i v2 = {
+        viewport_d * triangle->vertices[1].vertex.x / triangle->vertices[1].vertex.y + screen->width_2,
+        viewport_d * triangle->vertices[1].vertex.z / triangle->vertices[1].vertex.y + screen->height_2
+    };
+    Vec2i v3 = {
+        viewport_d * triangle->vertices[2].vertex.x / triangle->vertices[2].vertex.y + screen->width_2,
+        viewport_d * triangle->vertices[2].vertex.z / triangle->vertices[2].vertex.y + screen->height_2
+    };
+
+    render_line(screen, v1, v2, WIREFRAME_COLOR, true);
+    render_line(screen, v2, v3, WIREFRAME_COLOR, true);
+    render_line(screen, v1, v3, WIREFRAME_COLOR, true);
+}
+
+uint32_t get_color_value(Col3i color)
+{
+    return ((uint32_t) color.r << 16) | ((uint32_t) color.g << 8) | color.b;
+}
+
+void renderer3d_rasterize_triangle_shaded(Triangle *triangle, LightList *light_list, Camera *camera, Screen *screen)
+{
+    Col3i color = COL3I_BLACK;
+
+    for (int l = 0; l < light_list->num_lights; l++) {
+        Vec3 light_normal = vec3_average(
+            vec3_subtract(triangle->vertices[0].vertex, light_list->lights[l]->transform_camera.position),
+            vec3_subtract(triangle->vertices[1].vertex, light_list->lights[l]->transform_camera.position),
+            vec3_subtract(triangle->vertices[2].vertex, light_list->lights[l]->transform_camera.position)
+        );
+
+        light_normal.x *= -1.0;
+        light_normal.y *= -1.0;
+        light_normal.z *= -1.0;
+
+        double angle = vec3_angle(light_normal, triangle->normal);
+        uint8_t c = (uint8_t) remap(M_PI_2, 0, 0, 255, angle);
+        color.r += c;
+        color.g += c;
+        color.b += c;
+    }
+
+    Vec2i v1 = {
+        viewport_d * triangle->vertices[0].vertex.x / triangle->vertices[0].vertex.y + screen->width_2,
+        viewport_d * triangle->vertices[0].vertex.z / triangle->vertices[0].vertex.y + screen->height_2
+    };
+    Vec2i v2 = {
+        viewport_d * triangle->vertices[1].vertex.x / triangle->vertices[1].vertex.y + screen->width_2,
+        viewport_d * triangle->vertices[1].vertex.z / triangle->vertices[1].vertex.y + screen->height_2
+    };
+    Vec2i v3 = {
+        viewport_d * triangle->vertices[2].vertex.x / triangle->vertices[2].vertex.y + screen->width_2,
+        viewport_d * triangle->vertices[2].vertex.z / triangle->vertices[2].vertex.y + screen->height_2
+    };
+
+    render_line(screen, v1, v2, get_color_value(color), true);
+    render_line(screen, v2, v3, get_color_value(color), true);
+    render_line(screen, v1, v3, get_color_value(color), true);
+}
+
+void renderer3d_render(RenderList *render_list, LightList *light_list, Camera *camera, Screen *screen)
+{
+    viewport_d = 1.0 / tan(camera->fov * DEG2RAD * 0.5);
+    viewport_d *= screen->height_2;
+
+    for (int l = 0; l < light_list->num_lights; l++) {
+        renderer3d_compute_light_camera_transform(light_list->lights[l], camera);
+    }
 
     for (int i = 0; i < render_list->num_triangles; i++) {
-        Vec2i v1 = {
-            d * render_list->triangles[i]->vertices[0].vertex.x / render_list->triangles[i]->vertices[0].vertex.y + screen->width_2,
-            d * render_list->triangles[i]->vertices[0].vertex.z / render_list->triangles[i]->vertices[0].vertex.y + screen->height_2
-        };
-        Vec2i v2 = {
-            d * render_list->triangles[i]->vertices[1].vertex.x / render_list->triangles[i]->vertices[1].vertex.y + screen->width_2,
-            d * render_list->triangles[i]->vertices[1].vertex.z / render_list->triangles[i]->vertices[1].vertex.y + screen->height_2
-        };
-        Vec2i v3 = {
-            d * render_list->triangles[i]->vertices[2].vertex.x / render_list->triangles[i]->vertices[2].vertex.y + screen->width_2,
-            d * render_list->triangles[i]->vertices[2].vertex.z / render_list->triangles[i]->vertices[2].vertex.y + screen->height_2
-        };
-
-        render_line(screen, v1, v2, WIREFRAME_COLOR, true);
-        render_line(screen, v2, v3, WIREFRAME_COLOR, true);
-        render_line(screen, v1, v3, WIREFRAME_COLOR, true);
+        //renderer3d_rasterize_triangle_wireframe(render_list->triangles[i], light_list, camera, screen);
+        renderer3d_rasterize_triangle_shaded(render_list->triangles[i], light_list, camera, screen);
     }
 
     //render_circle(screen, (Vec2i) {screen->width_2 - 0, screen->height_2 - 0}, screen->height_2 - 2, 0x202020);

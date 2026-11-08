@@ -46,6 +46,17 @@ int main()
         .num_meshes = 2
     };
 
+    Light sun = {
+        .transform = TRANSFORM_ZERO,
+        .brightness = 1.0,
+        .state = 1
+    };
+
+    LightList light_list = {
+        .lights = {&sun},
+        .num_lights = 1
+    };
+
     Camera camera = {
         .transform = TRANSFORM_ZERO,
         .fov = 33.0,
@@ -92,7 +103,7 @@ int main()
         sphere_mesh->transform.rotation -= delta_time * 0.5;
 
         renderer3d_compute_render_list(render_list, &mesh_list, &camera);
-        renderer3d_render(render_list, &camera, &screen);
+        renderer3d_render(render_list, &light_list, &camera, &screen);
 
         snprintf(label_stats, sizeof(label_stats), "TRIS: %d", render_list->num_triangles);
         fenster_text(&f, 8, 24, label_stats, 2, 0x666666);
