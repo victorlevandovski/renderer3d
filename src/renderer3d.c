@@ -72,14 +72,18 @@ Mesh* renderer3d_load_mesh(char* filename)
 
 #define pixel(s, x, y) ((s)->buffer[(((s)->height - y - 1) * (s)->width) + (x)])
 
-static void render_line(Screen *screen, Vec2i from, Vec2i to, uint32_t c)
+static void render_line(Screen *screen, Vec2i from, Vec2i to, uint32_t c, bool clip)
 {
     int dx = abs(to.x - from.x), sx = from.x < to.x ? 1 : -1;
     int dy = abs(to.y - from.y), sy = from.y < to.y ? 1 : -1;
     int err = (dx > dy ? dx : -dy) / 2, e2;
     for (;;) {
         if (from.x >= 0 && from.x < screen->width && from.y >= 0 && from.y < screen->height) {
-            pixel(screen, from.x, from.y) = c;
+            int x = from.x - screen->height_2;
+            int y = from.y - screen->height_2;
+            if (!clip || sqrt(x * x + y * y) <= screen->height_2 - 2) {
+                pixel(screen, from.x, from.y) = c;
+            }
         }
         if (from.x == to.x && from.y == to.y) {
             break;
@@ -93,6 +97,26 @@ static void render_line(Screen *screen, Vec2i from, Vec2i to, uint32_t c)
             err += dx;
             from.y += sy;
         }
+    }
+}
+
+static void render_circle(Screen *screen, Vec2i center, int radius, uint32_t c)
+{
+    int segments = 360;
+    double angle = 0;
+
+    for (int i = 1; i < segments; i++) {
+        double next_angle = 2 * M_PI * i / segments;
+        Vec2i from = {
+            .x = (int) (cos(angle) * radius) + center.x,
+            .y = (int) (sin(angle) * radius) + center.y,
+        };
+        Vec2i to = {
+            .x = (int) (cos(next_angle) * radius) + center.x,
+            .y = (int) (sin(next_angle) * radius) + center.y,
+        };
+        render_line(screen, from, to, c, false);
+        angle = next_angle;
     }
 }
 
@@ -238,8 +262,10 @@ void renderer3d_render(RenderList *render_list, Camera *camera, Screen *screen)
             d * render_list->triangles[i]->vertices[2].vertex.z / render_list->triangles[i]->vertices[2].vertex.y + screen->height_2
         };
 
-        render_line(screen, v1, v2, WIREFRAME_COLOR);
-        render_line(screen, v2, v3, WIREFRAME_COLOR);
-        render_line(screen, v1, v3, WIREFRAME_COLOR);
+        render_line(screen, v1, v2, WIREFRAME_COLOR, true);
+        render_line(screen, v2, v3, WIREFRAME_COLOR, true);
+        render_line(screen, v1, v3, WIREFRAME_COLOR, true);
     }
+
+    //render_circle(screen, (Vec2i) {screen->width_2 - 0, screen->height_2 - 0}, screen->height_2 - 2, 0x202020);
 }

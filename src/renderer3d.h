@@ -5,7 +5,7 @@
 #define MESH_LIST_MAX_MESHES 1024
 #define RENDER_LIST_MAX_TRIANGLES 32768
 
-#define WIREFRAME_COLOR 0x9966aa
+#define WIREFRAME_COLOR 0x7744bb
 
 typedef struct {
     uint32_t *buffer;
