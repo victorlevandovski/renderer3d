@@ -132,9 +132,57 @@ void renderer3d_transform_mesh_triangles(Mesh *mesh, Camera *camera)
     }
 }
 
+static double viewport_k, viewport_k2;
+
+bool renderer3d_is_line_crossing_circle(double radius, Vec3 a, Vec3 b)
+{
+    double dx = b.x - a.x;
+    double dy = b.z - a.z;
+    double l_sq = dx * dx + dy * dy;
+
+    if (l_sq == 0)
+        return false;
+
+    double t = (-a.x * dx - a.z * dy) / l_sq;
+
+    if (t <= 0 || t >= 1)
+        return false;
+
+    double d_sq = pow(a.x + t*dx, 2) + pow(a.z + t * dy, 2);
+
+    return d_sq <= radius * radius;
+}
+
+/* Candidate for performance optimization */
+bool renderer3d_is_triangle_in_viewport(Triangle *triangle)
+{
+    double max_y = 0;
+
+    for (int i = 0; i < 3; i++) {
+        double d_sq = triangle->vertices[i].vertex.x * triangle->vertices[i].vertex.x + triangle->vertices[i].vertex.z * triangle->vertices[i].vertex.z;
+        double r_sq = viewport_k2 * triangle->vertices[i].vertex.y * triangle->vertices[i].vertex.y;
+
+        // vertex is inside the circle
+        if (d_sq <= r_sq)
+            return true;
+
+        if (triangle->vertices[i].vertex.y > max_y)
+            max_y = triangle->vertices[i].vertex.y;
+    }
+
+    double radius = max_y * viewport_k;
+
+    return renderer3d_is_line_crossing_circle(radius, triangle->vertices[0].vertex, triangle->vertices[1].vertex)
+        || renderer3d_is_line_crossing_circle(radius, triangle->vertices[1].vertex, triangle->vertices[2].vertex)
+        || renderer3d_is_line_crossing_circle(radius, triangle->vertices[0].vertex, triangle->vertices[2].vertex);
+}
+
 int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera)
 {
     int num_triangles = 0;
+
+    viewport_k = tan(camera->fov * 0.5 * DEG2RAD);
+    viewport_k2 = viewport_k * viewport_k;
 
     for (int m = 0; m < mesh_list->num_meshes; m++) {
         if (!mesh_list->meshes[m]->state)
@@ -153,9 +201,15 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
                 mesh_list->meshes[m]->triangles_transformed[t].vertices[1].vertex,
                 mesh_list->meshes[m]->triangles_transformed[t].vertices[2].vertex
             );
+
+            // todo: additionally check if mesh is fully in viewport to skip per-triangle check
+            if (!renderer3d_is_triangle_in_viewport(&mesh_list->meshes[m]->triangles_transformed[t]))
+                continue;
+
             if (vec3_angle(camera_normal, mesh_list->meshes[m]->triangles_transformed[t].normal) <= M_PI_2) {
                 continue;
             }
+
             render_list->triangles[num_triangles++] = &mesh_list->meshes[m]->triangles_transformed[t];
         }
     }
