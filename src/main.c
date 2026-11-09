@@ -63,6 +63,7 @@ int main()
         .near_plane = 0.1,
     };
 
+    //sun.transform.rotation = M_PI_2 * 0.5;
     camera.transform.rotation = 0.0;
 
     double camera_speed = 1.0;
