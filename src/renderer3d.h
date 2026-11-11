@@ -17,9 +17,11 @@ typedef struct {
 } Screen;
 
 typedef struct {
-    Vec3 vertex;
+    Vec3 vertex; // z used as w after vertex is projected on screen
     Vec3 normal;
     Vec2 uv;
+    double w_1;
+    uint8_t light;
     int attributes;
 } Vertex;
 
@@ -42,8 +44,8 @@ typedef struct {
     Triangle *triangles_local;
     Triangle *triangles_transformed;
     unsigned int num_triangles;
-    Transform transform;
-    Transform transform_camera;
+    Transform world_transform;
+    Transform camera_transform;
     double radius;
     int state;
     int attributes;
@@ -55,8 +57,9 @@ typedef struct {
 } MeshList;
 
 typedef struct {
-    Transform transform;
-    Transform transform_camera;
+    Transform world_transform;
+    Transform camera_transform;
+    Vec3 normal;
     double brightness;
     int state;
 } Light;
@@ -84,8 +87,15 @@ typedef struct {
 extern Col3i COL3I_BLACK;
 extern Col3i COL3I_WHITE;
 
+#define pixel(s, x, y) ((s)->buffer[(((s)->height - y - 1) * (s)->width) + (x)])
+#define col3i_to_uint32_t(c) (((uint32_t) (c).r << 16) | ((uint32_t) (c).g << 8) | (c).b)
+
 Mesh* renderer3d_load_mesh(char* filename);
 
-bool renderer3d_is_mesh_in_viewport(Mesh* mesh, Camera *camera);
+bool renderer3d_is_transformed_mesh_in_viewport(const Mesh* mesh, const Camera *camera);
+void renderer3d_compute_camera_transform(const Transform *world_transform, Transform *camera_transform, const Camera *camera);
+void renderer3d_transform_mesh_triangles(const Mesh *mesh, const Camera *camera);
 int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera);
-void renderer3d_render(RenderList *render_list, LightList *light_list, Camera *camera, Screen *screen);
+void renderer3d_compute_triangle_lighting(Triangle *triangle, const LightList *light_list);
+void renderer3d_compute_triangle_for_rasterization(Triangle *triangle, Camera *camera, Screen *screen);
+void renderer3d_render(const RenderList *render_list, LightList *light_list, Camera *camera, Screen *screen);

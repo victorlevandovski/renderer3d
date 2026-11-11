@@ -174,3 +174,23 @@ double rand_between(double min, double max)
 {
     return min + ((max - min) / RAND_MAX) * rand();
 }
+
+
+bool is_outer_points_line_crossing_circle(const Vec3 a, const Vec3 b, const double radius)
+{
+    double dx = b.x - a.x;
+    double dy = b.z - a.z;
+    double l_sq = dx * dx + dy * dy;
+
+    if (l_sq == 0)
+        return false;
+
+    double t = (-a.x * dx - a.z * dy) / l_sq;
+
+    if (t <= 0 || t >= 1)
+        return false;
+
+    double d_sq = pow(a.x + t*dx, 2) + pow(a.z + t * dy, 2);
+
+    return d_sq <= radius * radius;
+}

@@ -30,15 +30,15 @@ int main()
     char label_debug[128];
 
     Mesh *cube_mesh = renderer3d_load_mesh("assets/cube.obj");
-    cube_mesh->transform.position.x = 5;
-    cube_mesh->transform.position.y = -0.61;
-    cube_mesh->transform.scale = 1;
+    cube_mesh->world_transform.position.x = 5;
+    cube_mesh->world_transform.position.y = -0.61;
+    cube_mesh->world_transform.scale = 1;
     cube_mesh->state = 1;
 
     Mesh *sphere_mesh = renderer3d_load_mesh("assets/sphere.obj");
-    sphere_mesh->transform.position.x = 5;
-    sphere_mesh->transform.position.y = 0.61;
-    sphere_mesh->transform.scale = 1;
+    sphere_mesh->world_transform.position.x = 5;
+    sphere_mesh->world_transform.position.y = 0.61;
+    sphere_mesh->world_transform.scale = 1;
     sphere_mesh->state = 1;
 
     MeshList mesh_list = {
@@ -47,7 +47,7 @@ int main()
     };
 
     Light sun = {
-        .transform = TRANSFORM_ZERO,
+        .world_transform = TRANSFORM_ZERO,
         .brightness = 1.0,
         .state = 1
     };
@@ -63,7 +63,7 @@ int main()
         .near_plane = 0.1,
     };
 
-    //sun.transform.rotation = M_PI_2 * 0.5;
+    sun.world_transform.rotation = M_PI_2 * 0.5;
     camera.transform.rotation = 0.0;
 
     double camera_speed = 1.0;
@@ -100,8 +100,8 @@ int main()
 
         memset(f.buf, 0, f.width * f.height * sizeof(uint32_t));
 
-        cube_mesh->transform.rotation += delta_time * 0.5;
-        sphere_mesh->transform.rotation -= delta_time * 0.5;
+        cube_mesh->world_transform.rotation += delta_time * 0.5;
+        sphere_mesh->world_transform.rotation -= delta_time * 0.5;
 
         renderer3d_compute_render_list(render_list, &mesh_list, &camera);
         renderer3d_render(render_list, &light_list, &camera, &screen);

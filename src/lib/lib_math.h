@@ -39,6 +39,13 @@ typedef struct {
     float z;
 } Vec3f;
 
+typedef struct {
+    double x;
+    double y;
+    double z;
+    double w;
+} Vec4;
+
 extern Vec2 VEC2_ZERO;
 extern Vec3 VEC3_ZERO;
 
@@ -70,3 +77,4 @@ double rand_between(double min, double max);
 
 double normalize_angle(double a);
 int rad_to_compass_deg(double a);
+bool is_outer_points_line_crossing_circle(Vec3 a, Vec3 b, double radius);
