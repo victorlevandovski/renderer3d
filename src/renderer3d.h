@@ -21,7 +21,7 @@ typedef struct {
     Vec3 vertex; // z used as w after vertex is projected on screen
     Vec3 normal;
     Vec2 uv;
-    double w_1;
+    double w_inv;
     uint8_t light;
     int attributes;
 } Vertex;

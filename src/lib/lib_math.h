@@ -7,6 +7,7 @@
 #define DEG2RAD 0.017453292519943295
 
 #define clamp(x, a, b) (((x) < (a)) ? (a) : (((x) > (b)) ? (b) : (x)))
+#define swap(a, b, t) do { (t) = (a); (a) = (b); (b) = (t); } while (0)
 
 int sign(double value);
 

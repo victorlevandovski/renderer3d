@@ -237,14 +237,18 @@ static void renderer3d_rasterize_triangle_wireframe(const Triangle *triangle, Sc
     render_line(screen, v1, v3, WIREFRAME_COLOR, false);
 }
 
-static void rasterize_triangle_line(Screen *screen, int y, int x_from, int x_to, uint32_t color)
+static void rasterize_triangle_line(Screen *screen, int y, int x_from, int x_to, double max_w_inv, uint32_t color)
 {
     if (y < 0 || y >= screen->height) return;
     if (x_from < 0) x_from = 0;
     if (x_to > screen->width - 1) x_to = screen->width - 1;
 
     for (int x = x_from; x <= x_to; x++) {
+        if (z_buffer[screen->width * y + x] > max_w_inv)
+            continue;
+
         pixel(screen, x, y) = color;
+        z_buffer[screen->width * y + x] = max_w_inv;
         // Fragment f = {
         //     .x = x,
         //     .y = y,
@@ -262,6 +266,15 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
     color.g += light;
     color.b += light;
 
+    // sort by y
+    Vertex tmp;
+    if (triangle->vertices[2].vertex.y < triangle->vertices[1].vertex.y) { swap(triangle->vertices[1], triangle->vertices[2], tmp); }
+    if (triangle->vertices[1].vertex.y < triangle->vertices[0].vertex.y) { swap(triangle->vertices[0], triangle->vertices[1], tmp); }
+    if (triangle->vertices[2].vertex.y < triangle->vertices[1].vertex.y) { swap(triangle->vertices[1], triangle->vertices[2], tmp); }
+
+    // find max w_inv of the whole triangle for quick z buffer check
+    double max_w_inv = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
+
     Vec2 vertices[3];
 
     for (int v = 0; v < 3; v++) {
@@ -271,19 +284,13 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
         };
     }
 
-    // sort by y
-    Vec2 tmp;
-    if (vertices[2].y < vertices[1].y) { tmp = vertices[2]; vertices[2] = vertices[1]; vertices[1] = tmp; }
-    if (vertices[1].y < vertices[0].y) { tmp = vertices[1]; vertices[1] = vertices[0]; vertices[0] = tmp; }
-    if (vertices[2].y < vertices[1].y) { tmp = vertices[2]; vertices[2] = vertices[1]; vertices[1] = tmp; }
-
     int dy_01 = ((int) ceil(vertices[1].y) + 0) - (int) ceil(vertices[0].y);
     int dy_12 = ((int) ceil(vertices[2].y) + 0) - (int) ceil(vertices[1].y);
 
     uint32_t c = col3i_to_uint32_t(color);
 
     double x_start, x_end, x_tmp;
-    int y_i = 0;
+    int y_i01 = 0;
 
     double dx_start = (vertices[2].x - vertices[0].x) / (vertices[2].y - vertices[0].y);
 
@@ -298,17 +305,17 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
         int y_start = (int) ceil(vertices[0].y);
         int y_end = (int) ceil(vertices[1].y) - 1;
         for (int y = y_start; y <= y_end; y++) {
-            x_start = vertices[0].x + dx_start * y_i;
-            x_end = vertices[0].x + dx_end * y_i;
-            if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
-            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, top_color);
-            y_i++;
+            x_start = vertices[0].x + dx_start * y_i01;
+            x_end = vertices[0].x + dx_end * y_i01;
+            if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
+            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, top_color);
+            y_i01++;
         }
     } else {
-        x_start = vertices[0].x;
-        x_end = vertices[1].x;
-        if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
-        //rasterize_triangle_line(screen, (int) ceil(vertices[0].y), (int) ceil(x_start), (int) ceil(x_end) - 1, top_line_color);
+        //x_start = vertices[0].x;
+        //x_end = vertices[1].x;
+        //if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
+        //rasterize_triangle_line(screen, (int) ceil(vertices[0].y), (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, top_line_color);
     }
 
     if (dy_12 > 0) {
@@ -316,18 +323,18 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
         int y_start = (int) ceil(vertices[1].y);
         int y_end = (int) ceil(vertices[2].y) - 1;
         for (int y = y_start, y_i12 = 0; y <= y_end; y++) {
-            x_start = vertices[0].x + dx_start * y_i;
+            x_start = vertices[0].x + dx_start * y_i01;
             x_end = vertices[1].x + dx_end * y_i12;
-            if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
-            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1 , bottom_color);
-            y_i++;
+            if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
+            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, bottom_color);
+            y_i01++;
             y_i12++;
         }
     } else {
         x_start = vertices[1].x;
         x_end = vertices[2].x;
-        if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
-        //rasterize_triangle_line(screen, (int) ceil(vertices[1].y), (int) ceil(x_start), (int) ceil(x_end) - 1, bottom_line_color);
+        if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
+        rasterize_triangle_line(screen, (int) ceil(vertices[1].y), (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, bottom_line_color);
     }
 }
 
@@ -350,7 +357,7 @@ void renderer3d_compute_triangle_for_rasterization(Triangle *triangle, Camera *c
         triangle->vertices[v].vertex.z = triangle->vertices[v].vertex.y; // used as w
         triangle->vertices[v].vertex.x = x_screen;
         triangle->vertices[v].vertex.y = y_screen;
-        triangle->vertices[v].w_1 = 1.0 / triangle->vertices[v].vertex.z;
+        triangle->vertices[v].w_inv = 1.0 / triangle->vertices[v].vertex.z;
     }
 }
 
@@ -362,6 +369,8 @@ void renderer3d_render_triangle(Triangle *triangle, Screen *screen)
 
 void renderer3d_render(const RenderList *render_list, LightList *light_list, Camera *camera, Screen *screen)
 {
+    memset(z_buffer, 0, screen->width * screen->height * sizeof(double));
+
     viewport_d = 1.0 / tan(camera->fov * DEG2RAD * 0.5);
     viewport_d *= screen->height_2;
 
