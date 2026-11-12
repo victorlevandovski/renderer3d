@@ -237,18 +237,52 @@ static void renderer3d_rasterize_triangle_wireframe(const Triangle *triangle, Sc
     render_line(screen, v1, v3, WIREFRAME_COLOR, false);
 }
 
-static void rasterize_triangle_line(Screen *screen, int y, int x_from, int x_to, double max_w_inv, uint32_t color)
+static double renderer3d_edge(const Vec3 a, const Vec3 b, const Vec3 c)
+{
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, int x_from, int x_to, uint32_t override_color)
 {
     if (y < 0 || y >= screen->height) return;
     if (x_from < 0) x_from = 0;
     if (x_to > screen->width - 1) x_to = screen->width - 1;
 
     for (int x = x_from; x <= x_to; x++) {
-        if (z_buffer[screen->width * y + x] > max_w_inv)
-            continue;
+        // Quick discard.
+        // Todo: see if it helps or steals FPS when rendering actual models
+        // Also we can assign relative z values to entire meshes, if they can be quickly sorted by depth + radius
+        if (z_buffer[screen->width * y + x] > triangle->w_inv_max) continue;
 
-        pixel(screen, x, y) = color;
-        z_buffer[screen->width * y + x] = max_w_inv;
+        double weight_0, weight_1, weight_2;
+
+        if (fabs(triangle->area) > 6.0) {
+            Vec3 p = { (double) x, (double) y, 0.0 };
+            weight_0 = renderer3d_edge(triangle->vertices[1].vertex, triangle->vertices[2].vertex, p) / triangle->area;
+            weight_1 = renderer3d_edge(triangle->vertices[2].vertex, triangle->vertices[0].vertex, p) / triangle->area;
+            weight_2 = renderer3d_edge(triangle->vertices[0].vertex, triangle->vertices[1].vertex, p) / triangle->area;
+        } else {
+            // simple approximation for small triangles
+            weight_0 = weight_1 = weight_2 = M_1_3;
+        }
+
+        double p_w_inv = weight_0 * triangle->vertices[0].w_inv + weight_1 * triangle->vertices[1].w_inv + weight_2 * triangle->vertices[2].w_inv;
+        p_w_inv = clamp(p_w_inv, 0.0, 1.0);
+
+        if (z_buffer[screen->width * y + x] > p_w_inv) continue;
+
+        double light = weight_0 * triangle->vertices[0].light + weight_1 * triangle->vertices[1].light + weight_2 * triangle->vertices[2].light;
+        light = clamp(light, 0.0, 1.0);
+
+        uint8_t light_8 = (uint8_t) (light * 255);
+        light_8 = clamp(light_8, 0, 255);
+        Col3i color = COL3I_BLACK;
+        color.r = light_8;
+        color.g = light_8;
+        color.b = light_8;
+
+        pixel(screen, x, y) = col3i_to_uint32_t(color);
+        z_buffer[screen->width * y + x] = p_w_inv;
         // Fragment f = {
         //     .x = x,
         //     .y = y,
@@ -260,20 +294,14 @@ static void rasterize_triangle_line(Screen *screen, int y, int x_from, int x_to,
 
 static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 {
-    Col3i color = COL3I_BLACK;
-    uint8_t light = (triangle->vertices[0].light + triangle->vertices[1].light + triangle->vertices[2].light) / 3;
-    color.r += light;
-    color.g += light;
-    color.b += light;
-
     // sort by y
     Vertex tmp;
     if (triangle->vertices[2].vertex.y < triangle->vertices[1].vertex.y) { swap(triangle->vertices[1], triangle->vertices[2], tmp); }
     if (triangle->vertices[1].vertex.y < triangle->vertices[0].vertex.y) { swap(triangle->vertices[0], triangle->vertices[1], tmp); }
     if (triangle->vertices[2].vertex.y < triangle->vertices[1].vertex.y) { swap(triangle->vertices[1], triangle->vertices[2], tmp); }
 
-    // find max w_inv of the whole triangle for quick z buffer check
-    double max_w_inv = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
+    triangle->area = renderer3d_edge(triangle->vertices[0].vertex, triangle->vertices[1].vertex, triangle->vertices[2].vertex);
+    triangle->w_inv_max = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
 
     Vec2 vertices[3];
 
@@ -287,14 +315,12 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
     int dy_01 = ((int) ceil(vertices[1].y) + 0) - (int) ceil(vertices[0].y);
     int dy_12 = ((int) ceil(vertices[2].y) + 0) - (int) ceil(vertices[1].y);
 
-    uint32_t c = col3i_to_uint32_t(color);
-
     double x_start, x_end, x_tmp;
     int y_i01 = 0;
 
     double dx_start = (vertices[2].x - vertices[0].x) / (vertices[2].y - vertices[0].y);
 
-    //c = 0xffffff;
+    uint32_t c = 0xffffff;
     uint32_t top_color = c;
     uint32_t bottom_color = c;
     uint32_t top_line_color = c;
@@ -308,14 +334,14 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
             x_start = vertices[0].x + dx_start * y_i01;
             x_end = vertices[0].x + dx_end * y_i01;
             if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
-            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, top_color);
+            rasterize_triangle_line(triangle, screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, top_color);
             y_i01++;
         }
     } else {
         //x_start = vertices[0].x;
         //x_end = vertices[1].x;
         //if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
-        //rasterize_triangle_line(screen, (int) ceil(vertices[0].y), (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, top_line_color);
+        //rasterize_triangle_line(triangle, screen, (int) ceil(vertices[0].y), (int) ceil(x_start), (int) ceil(x_end) - 1, top_line_color);
     }
 
     if (dy_12 > 0) {
@@ -326,7 +352,7 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
             x_start = vertices[0].x + dx_start * y_i01;
             x_end = vertices[1].x + dx_end * y_i12;
             if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
-            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, bottom_color);
+            rasterize_triangle_line(triangle, screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, bottom_color);
             y_i01++;
             y_i12++;
         }
@@ -334,7 +360,7 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
         x_start = vertices[1].x;
         x_end = vertices[2].x;
         if (x_start > x_end) { swap(x_start, x_end, x_tmp); }
-        rasterize_triangle_line(screen, (int) ceil(vertices[1].y), (int) ceil(x_start), (int) ceil(x_end) - 1, max_w_inv, bottom_line_color);
+        rasterize_triangle_line(triangle, screen, (int) ceil(vertices[1].y), (int) ceil(x_start), (int) ceil(x_end) - 1, bottom_line_color);
     }
 }
 
@@ -343,7 +369,7 @@ void renderer3d_compute_triangle_lighting(Triangle *triangle, const LightList *l
     for (int l = 0; l < light_list->num_lights; l++) {
         for (int v = 0; v < 3; v++) {
             double angle = vec3_angle(light_list->lights[l]->normal, triangle->vertices[v].normal);
-            triangle->vertices[v].light = (uint8_t) remap(M_PI_2, 0, 0, 255, angle);
+            triangle->vertices[v].light = remap(0.0, M_PI_2, 1.0, 0.0, angle);
         }
     }
 }

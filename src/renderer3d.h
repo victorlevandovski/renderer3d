@@ -22,13 +22,15 @@ typedef struct {
     Vec3 normal;
     Vec2 uv;
     double w_inv;
-    uint8_t light;
+    double light;
     int attributes;
 } Vertex;
 
 typedef struct {
     Vertex vertices[3];
     Vec3 normal;
+    double w_inv_max;
+    double area;
     int attributes;
 } Triangle;
 
