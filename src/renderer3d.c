@@ -25,6 +25,11 @@ Transform TRANSFORM_ZERO = {
     .scale = 1.0,
 };
 
+void renderer3d_init(const Screen *screen)
+{
+    z_buffer = malloc(sizeof(double) * screen->width * screen->height);
+}
+
 Mesh* renderer3d_load_mesh(char* filename)
 {
     Mesh *mesh = malloc(sizeof(Mesh));
@@ -107,28 +112,6 @@ static void render_line(Screen *screen, Vec2i from, Vec2i to, uint32_t c, bool c
             err += dx;
             from.y += sy;
         }
-    }
-}
-
-static void render_line_y(Screen *screen, int y, int x_from, int x_to, uint32_t color)
-{
-    if (y < 0 || y >= screen->height)
-        return;
-
-    if (x_from > x_to) {
-        int x = x_from;
-        x_from = x_to;
-        x_to = x;
-    }
-
-    if (x_from < 0)
-        x_from = 0;
-
-    if (x_to > screen->width - 1)
-        x_to = screen->width - 1;
-
-    for (int x = x_from; x <= x_to; x++) {
-        pixel(screen, x, y) = color;
     }
 }
 
@@ -243,7 +226,7 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
 
 static double viewport_d;
 
-void renderer3d_rasterize_triangle_wireframe(Triangle *triangle, Screen *screen)
+static void renderer3d_rasterize_triangle_wireframe(const Triangle *triangle, Screen *screen)
 {
     Vec2i v1 = {(int) triangle->vertices[0].vertex.x, (int) triangle->vertices[0].vertex.y};
     Vec2i v2 = {(int) triangle->vertices[1].vertex.x, (int) triangle->vertices[1].vertex.y};
@@ -254,7 +237,24 @@ void renderer3d_rasterize_triangle_wireframe(Triangle *triangle, Screen *screen)
     render_line(screen, v1, v3, WIREFRAME_COLOR, false);
 }
 
-void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
+static void rasterize_triangle_line(Screen *screen, int y, int x_from, int x_to, uint32_t color)
+{
+    if (y < 0 || y >= screen->height) return;
+    if (x_from < 0) x_from = 0;
+    if (x_to > screen->width - 1) x_to = screen->width - 1;
+
+    for (int x = x_from; x <= x_to; x++) {
+        pixel(screen, x, y) = color;
+        // Fragment f = {
+        //     .x = x,
+        //     .y = y,
+        //     .light = 128
+        // };
+        // pixel(screen, x, y) = renderer3d_shader_shade(&f);
+    }
+}
+
+static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 {
     Col3i color = COL3I_BLACK;
     uint8_t light = (triangle->vertices[0].light + triangle->vertices[1].light + triangle->vertices[2].light) / 3;
@@ -266,8 +266,8 @@ void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 
     for (int v = 0; v < 3; v++) {
         vertices[v] = (Vec2) {
-            round(triangle->vertices[v].vertex.x),
-            round(triangle->vertices[v].vertex.y)
+            triangle->vertices[v].vertex.x,
+            triangle->vertices[v].vertex.y
         };
     }
 
@@ -277,50 +277,57 @@ void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
     if (vertices[1].y < vertices[0].y) { tmp = vertices[1]; vertices[1] = vertices[0]; vertices[0] = tmp; }
     if (vertices[2].y < vertices[1].y) { tmp = vertices[2]; vertices[2] = vertices[1]; vertices[1] = tmp; }
 
-    float dy_01 = (float) fabs(vertices[1].y - vertices[0].y);
-    float dx_01 = (float) fabs(vertices[1].x - vertices[0].x);
-    float dy_12 = (float) fabs(vertices[2].y - vertices[1].y);
-    float dx_12 = (float) fabs(vertices[2].x - vertices[1].x);
-    float dy_02 = (float) fabs(vertices[2].y - vertices[0].y);
-    float dx_02 = (float) fabs(vertices[2].x - vertices[0].x);
-
-    float s_1 = vertices[0].x < vertices[1].x ? 1.0f : -1.0f;
-    float s_2 = vertices[0].x < vertices[2].x ? 1.0f : -1.0f;
-    float s_12 = vertices[1].x < vertices[2].x ? 1.0f : -1.0f;
+    int dy_01 = ((int) ceil(vertices[1].y) + 0) - (int) ceil(vertices[0].y);
+    int dy_12 = ((int) ceil(vertices[2].y) + 0) - (int) ceil(vertices[1].y);
 
     uint32_t c = col3i_to_uint32_t(color);
 
-    float x_from, x_to;
-
+    double x_start, x_end, x_tmp;
     int y_i = 0;
 
-    // quick dirty code here...
+    double dx_start = (vertices[2].x - vertices[0].x) / (vertices[2].y - vertices[0].y);
+
+    //c = 0xffffff;
+    uint32_t top_color = c;
+    uint32_t bottom_color = c;
+    uint32_t top_line_color = c;
+    uint32_t bottom_line_color = c;
 
     if (dy_01 > 0) {
-        for (int y = vertices[0].y; y <= vertices[1].y; y++) {
-            x_from = (float) vertices[0].x + (dx_02 / dy_02) * (float) y_i * s_2;
-            x_to = (float) vertices[0].x + (dx_01 / dy_01) * (float) y_i * s_1;
-            x_from = s_2 > 0 ? ceilf(x_from) : floorf(x_from);
-            x_to = s_1 > 0 ? ceilf(x_to) : floorf(x_to);
-            render_line_y(screen, y, (int) x_from, (int) x_to , c);
+        double dx_end = (vertices[1].x - vertices[0].x) / (vertices[1].y - vertices[0].y);
+        int y_start = (int) ceil(vertices[0].y);
+        int y_end = (int) ceil(vertices[1].y) - 1;
+        for (int y = y_start; y <= y_end; y++) {
+            x_start = vertices[0].x + dx_start * y_i;
+            x_end = vertices[0].x + dx_end * y_i;
+            if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
+            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1, top_color);
             y_i++;
         }
     } else {
-        render_line_y(screen, vertices[0].y, vertices[0].x, vertices[1].x, c);
+        x_start = vertices[0].x;
+        x_end = vertices[1].x;
+        if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
+        //rasterize_triangle_line(screen, (int) ceil(vertices[0].y), (int) ceil(x_start), (int) ceil(x_end) - 1, top_line_color);
     }
 
     if (dy_12 > 0) {
-        for (int y = vertices[1].y, y_i12 = 0; y <= vertices[2].y; y++) {
-            x_from = (float) vertices[0].x + (dx_02 / dy_02) * (float) y_i * s_2;
-            x_to = (float) vertices[1].x + (dx_12 / dy_12) * (float) y_i12 * s_12;
-            x_from = s_2 < 0 ? ceilf(x_from) : floorf(x_from);
-            x_to = s_12 < 0 ? ceilf(x_to) : floorf(x_to);
-            render_line_y(screen, y, (int) x_from, (int) x_to , c);
+        double dx_end = (vertices[2].x - vertices[1].x) / (vertices[2].y - vertices[1].y);
+        int y_start = (int) ceil(vertices[1].y);
+        int y_end = (int) ceil(vertices[2].y) - 1;
+        for (int y = y_start, y_i12 = 0; y <= y_end; y++) {
+            x_start = vertices[0].x + dx_start * y_i;
+            x_end = vertices[1].x + dx_end * y_i12;
+            if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
+            rasterize_triangle_line(screen, y, (int) ceil(x_start), (int) ceil(x_end) - 1 , bottom_color);
             y_i++;
             y_i12++;
         }
     } else {
-        render_line_y(screen, vertices[1].y, vertices[1].x, vertices[2].x, c);
+        x_start = vertices[1].x;
+        x_end = vertices[2].x;
+        if (x_start > x_end) { x_tmp = x_start; x_start = x_end; x_end = x_tmp; }
+        //rasterize_triangle_line(screen, (int) ceil(vertices[1].y), (int) ceil(x_start), (int) ceil(x_end) - 1, bottom_line_color);
     }
 }
 
@@ -347,6 +354,12 @@ void renderer3d_compute_triangle_for_rasterization(Triangle *triangle, Camera *c
     }
 }
 
+void renderer3d_render_triangle(Triangle *triangle, Screen *screen)
+{
+    renderer3d_rasterize_triangle_shaded(triangle, screen);
+    //renderer3d_rasterize_triangle_wireframe(triangle, screen);
+}
+
 void renderer3d_render(const RenderList *render_list, LightList *light_list, Camera *camera, Screen *screen)
 {
     viewport_d = 1.0 / tan(camera->fov * DEG2RAD * 0.5);
@@ -364,7 +377,6 @@ void renderer3d_render(const RenderList *render_list, LightList *light_list, Cam
     for (int i = 0; i < render_list->num_triangles; i++) {
         renderer3d_compute_triangle_lighting(render_list->triangles[i], light_list);
         renderer3d_compute_triangle_for_rasterization(render_list->triangles[i], camera, screen);
-        renderer3d_rasterize_triangle_shaded(render_list->triangles[i], screen);
-        renderer3d_rasterize_triangle_wireframe(render_list->triangles[i], screen);
+        renderer3d_render_triangle(render_list->triangles[i], screen);
     }
 }
