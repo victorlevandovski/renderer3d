@@ -62,8 +62,8 @@ Mesh* renderer3d_load_mesh(char* filename)
                     .z = (double) obj_mesh->normals[index.n * 3 + 2]
                 },
                 .uv = {
-                    .x = (double) obj_mesh->texcoords[index.t * 3],
-                    .y = (double) obj_mesh->texcoords[index.t * 3 + 1],
+                    .x = (double) obj_mesh->texcoords[index.t * 2],
+                    .y = (double) obj_mesh->texcoords[index.t * 2 + 1],
                 }
             };
             double l;
