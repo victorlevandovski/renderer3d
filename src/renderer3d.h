@@ -1,9 +1,10 @@
 #pragma once
 
-#include "lib/lib_math.h"
-#include "renderer3d_shader.h"
+#include <stdint.h>
 
-#define MESH_LIST_MAX_MESHES 1024
+#include "lib/lib_math.h"
+
+#define OBJECT_LIST_MAX_OBJECTS 1024
 #define LIGHT_LIST_MAX_LIGHTS 4
 #define RENDER_LIST_MAX_TRIANGLES 32768
 
@@ -16,6 +17,25 @@ typedef struct {
     int width_2;
     int height_2;
 } Screen;
+
+typedef struct {
+    uint8_t r, g, b;
+} Col3i;
+
+typedef struct {
+    uint32_t *data;
+    unsigned int width;
+    unsigned int height;
+} Bitmap;
+
+typedef struct {
+    Bitmap bitmap;
+} Texture;
+
+typedef struct {
+    Texture *texture;
+    Col3i ambient_color;
+} Material;
 
 typedef struct {
     Vec3 vertex; // z used as w after vertex is projected on screen
@@ -32,6 +52,7 @@ typedef struct {
     double w_inv_max;
     double area;
     int attributes;
+    Material *material;
 } Triangle;
 
 typedef struct {
@@ -47,17 +68,25 @@ typedef struct {
     Triangle *triangles_local;
     Triangle *triangles_transformed;
     unsigned int num_triangles;
+    double radius;
+} Mesh;
+
+typedef struct {
+    Mesh *mesh;
+    Mesh *lod_meshes;
+    unsigned int num_lod_meshes;
+    Material *material;
     Transform world_transform;
     Transform camera_transform;
     double radius;
     int state;
     int attributes;
-} Mesh;
+} Object;
 
 typedef struct {
-    Mesh *meshes[MESH_LIST_MAX_MESHES];
-    unsigned int num_meshes;
-} MeshList;
+    Object *objects[OBJECT_LIST_MAX_OBJECTS];
+    unsigned int num_objects;
+} ObjectList;
 
 typedef struct {
     Transform world_transform;
@@ -83,26 +112,23 @@ typedef struct {
     double near_plane;
 } Camera;
 
-typedef struct {
-    uint8_t r, g, b;
-} Col3i;
-
 extern Col3i COL3I_BLACK;
 extern Col3i COL3I_WHITE;
 
 static double *z_buffer;
-static Texture *renderer_texture;
 
 #define pixel(s, x, y) ((s)->buffer[(((s)->height - (y) - 1) * (s)->width) + (x)])
 #define col3i_to_uint32_t(c) (((uint32_t) (c).r << 16) | ((uint32_t) (c).g << 8) | (c).b)
 
 Mesh* renderer3d_load_mesh(char* filename);
+Texture* renderer3d_shader_load_texture(char* filename);
+Object* renderer3d_load_object(char* filename);
 
-void renderer3d_init(const Screen *screen, Texture *texture);
-bool renderer3d_is_transformed_mesh_in_viewport(const Mesh* mesh, const Camera *camera);
+void renderer3d_init(const Screen *screen);
+//bool renderer3d_is_transformed_mesh_in_viewport(const Mesh* mesh, const Camera *camera);
 void renderer3d_compute_camera_transform(const Transform *world_transform, Transform *camera_transform, const Camera *camera);
-void renderer3d_transform_mesh_triangles(const Mesh *mesh, const Camera *camera);
-int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera);
+//void renderer3d_transform_mesh_triangles(const Mesh *mesh, const Camera *camera);
+int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_list, Camera *camera);
 void renderer3d_compute_triangle_lighting(Triangle *triangle, const LightList *light_list);
 void renderer3d_compute_triangle_for_rasterization(Triangle *triangle, Camera *camera, Screen *screen);
 void renderer3d_render_triangle(Triangle *triangle, Screen *screen);
