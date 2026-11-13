@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "fenster.h"
+//#include "fenster.h"
 #include "lib/fenster_ext.h"
 
 #include "renderer3d.h"
@@ -29,28 +29,39 @@ int main()
     char label_stats[64];
     char label_debug[128];
 
-    Mesh *cube_mesh = renderer3d_load_mesh("assets/cube.obj");
-    cube_mesh->world_transform.position.x = 5;
-    cube_mesh->world_transform.position.y = 0;
-    cube_mesh->world_transform.scale = 1;
-    cube_mesh->state = 0;
+    Texture *mars_texture = renderer3d_shader_load_texture("assets/textures/t_mars.png");
 
-    Mesh *sphere_mesh = renderer3d_load_mesh("assets/sphere.obj");
-    sphere_mesh->world_transform.position.x = 2;
-    sphere_mesh->world_transform.position.y = 0;
-    sphere_mesh->world_transform.position.z = 0.5;
-    sphere_mesh->world_transform.scale = 1;
-    sphere_mesh->state = 0;
+    Material m_mars = {
+        .texture = mars_texture,
+        .ambient_color = {
+            .r = 255,
+            .g = 255,
+            .b = 255,
+        },
+    };
 
-    Mesh *complex_mesh = renderer3d_load_mesh("assets/torus.obj");
-    complex_mesh->world_transform.position.x = 5;
-    complex_mesh->world_transform.position.y = 0;
-    complex_mesh->world_transform.scale = 1;
-    complex_mesh->state = 1;
+    Material m_flat = {
+        .texture = NULL,
+        .ambient_color = {
+            .r = 192,
+            .g = 128,
+            .b = 255,
+        },
+    };
 
-    MeshList mesh_list = {
-        .meshes = {cube_mesh, sphere_mesh, complex_mesh},
-        .num_meshes = 3
+    Object *cube_object = renderer3d_load_object("assets/cube.obj");
+    cube_object->material = &m_flat;
+    cube_object->world_transform.position.x = 5;
+    cube_object->world_transform.position.y = -0.61;
+
+    Object *sphere_object = renderer3d_load_object("assets/objects/sphere/sphere.obj");
+    sphere_object->material = &m_mars;
+    sphere_object->world_transform.position.x = 5;
+    sphere_object->world_transform.position.y = 0.61;
+
+    ObjectList object_list = {
+        .objects = {cube_object, sphere_object},
+        .num_objects = 2
     };
 
     Light sun = {
@@ -70,7 +81,7 @@ int main()
         .near_plane = 0.1,
     };
 
-    sun.world_transform.rotation = M_PI_2 * 0.5;
+    //sun.world_transform.rotation = M_PI_2 * 0.5;
     camera.transform.rotation = 0.0;
 
     double camera_speed = 1.0;
@@ -109,11 +120,10 @@ int main()
 
         memset(f.buf, 0, f.width * f.height * sizeof(uint32_t));
 
-        cube_mesh->world_transform.rotation += delta_time * 0.05;
-        sphere_mesh->world_transform.rotation -= delta_time * 0.01;
-        complex_mesh->world_transform.rotation += delta_time * 0.5;
+        cube_object->world_transform.rotation += delta_time * 0.5;
+        sphere_object->world_transform.rotation -= delta_time * 0.5;
 
-        renderer3d_compute_render_list(render_list, &mesh_list, &camera);
+        renderer3d_compute_render_list(render_list, &object_list, &camera);
         renderer3d_render(render_list, &light_list, &camera, &screen);
 
         snprintf(label_stats, sizeof(label_stats), "TRIS: %d", render_list->num_triangles);

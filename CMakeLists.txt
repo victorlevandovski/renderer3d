@@ -31,6 +31,7 @@ add_custom_command(TARGET renderer3d POST_BUILD
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_SOURCE_DIR}/vendor/fenster"
     "${CMAKE_SOURCE_DIR}/vendor/fast_obj"
+    "${CMAKE_SOURCE_DIR}/vendor/stb"
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/src/lib"
 )

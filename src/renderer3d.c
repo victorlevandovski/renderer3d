@@ -30,63 +30,6 @@ void renderer3d_init(const Screen *screen)
     z_buffer = malloc(sizeof(double) * screen->width * screen->height);
 }
 
-Mesh* renderer3d_load_mesh(char* filename)
-{
-    Mesh *mesh = malloc(sizeof(Mesh));
-    if (!mesh)
-        return NULL;
-
-    fastObjMesh* obj_mesh = fast_obj_read(filename);
-    if (!obj_mesh)
-        return NULL;
-
-    mesh->num_triangles = obj_mesh->face_count;
-    mesh->triangles_local = malloc(sizeof(Triangle) * mesh->num_triangles);
-    mesh->triangles_transformed = malloc(sizeof(Triangle) * mesh->num_triangles);
-    mesh->radius = 0.0;
-    mesh->state = 1;
-
-    for (unsigned int f = 0; f < obj_mesh->face_count; f++) {
-        Triangle t = {};
-        for (unsigned int v = 0; v < 3; v++) {
-            fastObjIndex index = obj_mesh->indices[f * 3 + v];
-            Vertex vertex = (Vertex) {
-                .vertex = {
-                    .x = (double) obj_mesh->positions[index.p * 3],
-                    .y = (double) obj_mesh->positions[index.p * 3 + 1],
-                    .z = (double) obj_mesh->positions[index.p * 3 + 2]
-                },
-                .normal = {
-                    .x = (double) obj_mesh->normals[index.n * 3],
-                    .y = (double) obj_mesh->normals[index.n * 3 + 1],
-                    .z = (double) obj_mesh->normals[index.n * 3 + 2]
-                },
-                .uv = {
-                    .x = (double) obj_mesh->texcoords[index.t * 2],
-                    .y = (double) obj_mesh->texcoords[index.t * 2 + 1],
-                }
-            };
-            double l;
-            if ((l = vec3_length(vertex.vertex)) > mesh->radius) {
-                mesh->radius = l;
-            }
-            t.vertices[v] = vertex;
-        }
-
-        t.normal = vec3_normalize(vec3_add(t.vertices[0].normal, vec3_add(t.vertices[1].normal, t.vertices[2].normal)));
-
-        mesh->triangles_local[f] = t;
-    }
-
-    fast_obj_destroy(obj_mesh);
-
-    memcpy(mesh->triangles_transformed, mesh->triangles_local, sizeof(Triangle) * mesh->num_triangles);
-
-    mesh->world_transform = TRANSFORM_ZERO;
-
-    return mesh;
-}
-
 static void render_line(Screen *screen, Vec2i from, Vec2i to, uint32_t c, bool clip)
 {
     int dx = abs(to.x - from.x), sx = from.x < to.x ? 1 : -1;
@@ -124,33 +67,33 @@ void renderer3d_compute_camera_transform(const Transform *world_transform, Trans
     camera_transform->rotation = world_transform->rotation - camera->transform.rotation - M_PI_2 * 3;
 }
 
-bool renderer3d_is_transformed_mesh_in_viewport(const Mesh* mesh, const Camera *camera)
+static bool renderer3d_is_transformed_object_in_viewport(const Object* object, const Camera *camera)
 {
     // behind camera plane
-    if (mesh->camera_transform.position.y + mesh->radius < camera->near_plane)
+    if (object->camera_transform.position.y + object->radius < camera->near_plane)
         return false;
 
     // outside camera cone
-    double x = fabs(mesh->camera_transform.position.x);
+    double x = fabs(object->camera_transform.position.x);
     double theta = fabs(camera->fov) * 0.5 * DEG2RAD;
-    double d_camera = mesh->camera_transform.position.y * tan(theta);
+    double d_camera = object->camera_transform.position.y * tan(theta);
     double d_mesh = (x - d_camera) * cos(theta);
-    if (d_mesh > mesh->radius)
+    if (d_mesh > object->radius)
         return false;
 
     return true;
 }
 
-void renderer3d_transform_mesh_triangles(const Mesh *mesh, const Camera *camera)
+static void renderer3d_transform_mesh_triangles(const Object *object, const Mesh *mesh, const Camera *camera)
 {
     for (int t = 0; t < mesh->num_triangles; t++) {
         for (int v = 0; v < 3; v++) {
-            const Vec3 vertex_rotated = vec3_rotate_xy(mesh->triangles_local[t].vertices[v].vertex, mesh->world_transform.rotation - camera->transform.rotation);
-            mesh->triangles_transformed[t].vertices[v].vertex.x = vertex_rotated.x * mesh->world_transform.scale + mesh->camera_transform.position.x;
-            mesh->triangles_transformed[t].vertices[v].vertex.y = vertex_rotated.y * mesh->world_transform.scale + mesh->camera_transform.position.y;
-            mesh->triangles_transformed[t].vertices[v].vertex.z = vertex_rotated.z * mesh->world_transform.scale + mesh->camera_transform.position.z;
-            mesh->triangles_transformed[t].vertices[v].normal = vec3_rotate_xy(mesh->triangles_local[t].vertices[v].normal, mesh->world_transform.rotation - camera->transform.rotation);
-            mesh->triangles_transformed[t].normal = vec3_rotate_xy(mesh->triangles_local[t].normal, mesh->world_transform.rotation - camera->transform.rotation);
+            const Vec3 vertex_rotated = vec3_rotate_xy(mesh->triangles_local[t].vertices[v].vertex, object->world_transform.rotation - camera->transform.rotation);
+            mesh->triangles_transformed[t].vertices[v].vertex.x = vertex_rotated.x * object->world_transform.scale + object->camera_transform.position.x;
+            mesh->triangles_transformed[t].vertices[v].vertex.y = vertex_rotated.y * object->world_transform.scale + object->camera_transform.position.y;
+            mesh->triangles_transformed[t].vertices[v].vertex.z = vertex_rotated.z * object->world_transform.scale + object->camera_transform.position.z;
+            mesh->triangles_transformed[t].vertices[v].normal = vec3_rotate_xy(mesh->triangles_local[t].vertices[v].normal, object->world_transform.rotation - camera->transform.rotation);
+            mesh->triangles_transformed[t].normal = vec3_rotate_xy(mesh->triangles_local[t].normal, object->world_transform.rotation - camera->transform.rotation);
         }
     }
 }
@@ -181,7 +124,7 @@ static bool renderer3d_is_triangle_in_viewport(const Triangle *triangle)
         || is_outer_points_line_crossing_circle(triangle->vertices[0].vertex, triangle->vertices[2].vertex, radius);
 }
 
-int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list, Camera *camera)
+int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_list, Camera *camera)
 {
     int num_triangles = 0;
 
@@ -189,33 +132,37 @@ int renderer3d_compute_render_list(RenderList *render_list, MeshList *mesh_list,
     viewport_k = tan(camera->fov * 0.5 * DEG2RAD);
     viewport_k2 = viewport_k * viewport_k;
 
-    for (int m = 0; m < mesh_list->num_meshes; m++) {
-        if (!mesh_list->meshes[m]->state)
+    for (int o = 0; o < object_list->num_objects; o++) {
+        if (!object_list->objects[o]->state)
             continue;
 
-        renderer3d_compute_camera_transform(&mesh_list->meshes[m]->world_transform, &mesh_list->meshes[m]->camera_transform, camera);
+        renderer3d_compute_camera_transform(&object_list->objects[o]->world_transform, &object_list->objects[o]->camera_transform, camera);
 
-        if (!renderer3d_is_transformed_mesh_in_viewport(mesh_list->meshes[m], camera))
+        if (!renderer3d_is_transformed_object_in_viewport(object_list->objects[o], camera))
             continue;
 
-        renderer3d_transform_mesh_triangles(mesh_list->meshes[m], camera);
+        Mesh *mesh = object_list->objects[o]->mesh;
 
-        for (int t = 0; t < mesh_list->meshes[m]->num_triangles; t++) {
+        renderer3d_transform_mesh_triangles(object_list->objects[o], mesh, camera);
+
+        for (int t = 0; t < mesh->num_triangles; t++) {
             Vec3 camera_normal = vec3_average(
-                mesh_list->meshes[m]->triangles_transformed[t].vertices[0].vertex,
-                mesh_list->meshes[m]->triangles_transformed[t].vertices[1].vertex,
-                mesh_list->meshes[m]->triangles_transformed[t].vertices[2].vertex
+                mesh->triangles_transformed[t].vertices[0].vertex,
+                mesh->triangles_transformed[t].vertices[1].vertex,
+                mesh->triangles_transformed[t].vertices[2].vertex
             );
 
             // todo: additionally check if mesh is fully in viewport to skip per-triangle check
-            if (!renderer3d_is_triangle_in_viewport(&mesh_list->meshes[m]->triangles_transformed[t]))
+            if (!renderer3d_is_triangle_in_viewport(&mesh->triangles_transformed[t]))
                 continue;
 
-            if (vec3_angle(camera_normal, mesh_list->meshes[m]->triangles_transformed[t].normal) <= M_PI_2) {
+            if (vec3_angle(camera_normal, mesh->triangles_transformed[t].normal) <= M_PI_2) {
                 continue;
             }
 
-            render_list->triangles[num_triangles++] = &mesh_list->meshes[m]->triangles_transformed[t];
+            mesh->triangles_transformed[t].material = object_list->objects[o]->material;
+
+            render_list->triangles[num_triangles++] = &mesh->triangles_transformed[t];
         }
     }
 
@@ -274,32 +221,41 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
         double light = weight_0 * triangle->vertices[0].light + weight_1 * triangle->vertices[1].light + weight_2 * triangle->vertices[2].light;
         light = clamp(light, 0.0, 1.0);
 
-        uint8_t light_8 = (uint8_t) (light * 255);
-        light_8 = clamp(light_8, 0, 255);
-        Col3i color = COL3I_BLACK;
-        color.r = light_8;
-        color.g = light_8;
-        color.b = light_8;
+        Col3i c3i = COL3I_BLACK;
 
-        pixel(screen, x, y) = col3i_to_uint32_t(color);
+        if (triangle->material->texture) {
+            //renderer_texture
+            double uv_x = weight_0 * triangle->vertices[0].uv.x + weight_1 * triangle->vertices[1].uv.x + weight_2 * triangle->vertices[2].uv.x;
+            double uv_y = weight_0 * triangle->vertices[0].uv.y + weight_1 * triangle->vertices[1].uv.y + weight_2 * triangle->vertices[2].uv.y;
+            uv_x = clamp(uv_x, 0.0, 1.0);
+            uv_y = clamp(uv_y, 0.0, 1.0);
+
+            unsigned int t_x = (unsigned int) floor(uv_x * triangle->material->texture->bitmap.width);
+            unsigned int t_y = (unsigned int) floor(uv_y * triangle->material->texture->bitmap.height);
+
+            uint32_t color = triangle->material->texture->bitmap.data[t_y * triangle->material->texture->bitmap.width + t_x];
+            //uint8_t a = (color >> 24) & 0xFF;
+            uint8_t r = (color >> 16) & 0xFF;
+            uint8_t g = (color >>  8) & 0xFF;
+            uint8_t b =  color        & 0xFF;
+
+
+            c3i.r = (uint8_t) floor(light * r);
+            c3i.g = (uint8_t) floor(light * g);
+            c3i.b = (uint8_t) floor(light * b);
+        } else {
+            c3i.r = (uint8_t) floor(light * triangle->material->ambient_color.r);
+            c3i.g = (uint8_t) floor(light * triangle->material->ambient_color.g);
+            c3i.b = (uint8_t) floor(light * triangle->material->ambient_color.b);
+        }
+
+        pixel(screen, x, y) = col3i_to_uint32_t(c3i);
         z_buffer[screen->width * y + x] = p_w_inv;
-        // Fragment f = {
-        //     .x = x,
-        //     .y = y,
-        //     .light = 128
-        // };
-        // pixel(screen, x, y) = renderer3d_shader_shade(&f);
     }
 }
 
 static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 {
-    // sort by y
-    Vertex tmp;
-    if (triangle->vertices[2].vertex.y < triangle->vertices[1].vertex.y) { swap(triangle->vertices[1], triangle->vertices[2], tmp); }
-    if (triangle->vertices[1].vertex.y < triangle->vertices[0].vertex.y) { swap(triangle->vertices[0], triangle->vertices[1], tmp); }
-    if (triangle->vertices[2].vertex.y < triangle->vertices[1].vertex.y) { swap(triangle->vertices[1], triangle->vertices[2], tmp); }
-
     triangle->area = renderer3d_edge(triangle->vertices[0].vertex, triangle->vertices[1].vertex, triangle->vertices[2].vertex);
     triangle->w_inv_max = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
 
@@ -311,6 +267,12 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
             triangle->vertices[v].vertex.y
         };
     }
+
+    // sort by y
+    Vec2 tmp;
+    if (vertices[2].y < vertices[1].y) { swap(vertices[1], vertices[2], tmp); }
+    if (vertices[1].y < vertices[0].y) { swap(vertices[0], vertices[1], tmp); }
+    if (vertices[2].y < vertices[1].y) { swap(vertices[1], vertices[2], tmp); }
 
     int dy_01 = ((int) ceil(vertices[1].y) + 0) - (int) ceil(vertices[0].y);
     int dy_12 = ((int) ceil(vertices[2].y) + 0) - (int) ceil(vertices[1].y);
