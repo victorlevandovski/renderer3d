@@ -25,9 +25,10 @@ Transform TRANSFORM_ZERO = {
     .scale = 1.0,
 };
 
-void renderer3d_init(const Screen *screen)
+void renderer3d_init(const Screen *screen, Texture *texture)
 {
     z_buffer = malloc(sizeof(double) * screen->width * screen->height);
+    renderer_texture = texture;
 }
 
 Mesh* renderer3d_load_mesh(char* filename)
@@ -274,14 +275,27 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
         double light = weight_0 * triangle->vertices[0].light + weight_1 * triangle->vertices[1].light + weight_2 * triangle->vertices[2].light;
         light = clamp(light, 0.0, 1.0);
 
-        uint8_t light_8 = (uint8_t) (light * 255);
-        light_8 = clamp(light_8, 0, 255);
-        Col3i color = COL3I_BLACK;
-        color.r = light_8;
-        color.g = light_8;
-        color.b = light_8;
+        //renderer_texture
+        double uv_x = weight_0 * triangle->vertices[0].uv.x + weight_1 * triangle->vertices[1].uv.x + weight_2 * triangle->vertices[2].uv.x;
+        double uv_y = weight_0 * triangle->vertices[0].uv.y + weight_1 * triangle->vertices[1].uv.y + weight_2 * triangle->vertices[2].uv.y;
+        uv_x = clamp(uv_x, 0.0, 1.0);
+        uv_y = clamp(uv_y, 0.0, 1.0);
 
-        pixel(screen, x, y) = col3i_to_uint32_t(color);
+        unsigned int t_x = (unsigned int) floor(uv_x * renderer_texture->bitmap.width);
+        unsigned int t_y = (unsigned int) floor(uv_y * renderer_texture->bitmap.height);
+        // int t_x = x;
+        // int t_y = y;
+
+        uint32_t color = renderer_texture->bitmap.data[t_y * renderer_texture->bitmap.width + t_x];
+        pixel(screen, x, y) = color;
+        // uint8_t light_8 = (uint8_t) (light * 255);
+        // light_8 = clamp(light_8, 0, 255);
+        // Col3i color = COL3I_BLACK;
+        // color.r = light_8;
+        // color.g = light_8;
+        // color.b = light_8;
+        //
+        // pixel(screen, x, y) = col3i_to_uint32_t(color);
         z_buffer[screen->width * y + x] = p_w_inv;
         // Fragment f = {
         //     .x = x,

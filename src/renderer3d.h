@@ -91,13 +91,14 @@ extern Col3i COL3I_BLACK;
 extern Col3i COL3I_WHITE;
 
 static double *z_buffer;
+static Texture *renderer_texture;
 
 #define pixel(s, x, y) ((s)->buffer[(((s)->height - (y) - 1) * (s)->width) + (x)])
 #define col3i_to_uint32_t(c) (((uint32_t) (c).r << 16) | ((uint32_t) (c).g << 8) | (c).b)
 
 Mesh* renderer3d_load_mesh(char* filename);
 
-void renderer3d_init(const Screen *screen);
+void renderer3d_init(const Screen *screen, Texture *texture);
 bool renderer3d_is_transformed_mesh_in_viewport(const Mesh* mesh, const Camera *camera);
 void renderer3d_compute_camera_transform(const Transform *world_transform, Transform *camera_transform, const Camera *camera);
 void renderer3d_transform_mesh_triangles(const Mesh *mesh, const Camera *camera);

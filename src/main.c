@@ -29,6 +29,8 @@ int main()
     char label_stats[64];
     char label_debug[128];
 
+    Texture *mars_texture = renderer3d_shader_load_texture("assets/textures/t_mars.png");
+
     Mesh *cube_mesh = renderer3d_load_mesh("assets/cube.obj");
     cube_mesh->world_transform.position.x = 5;
     cube_mesh->world_transform.position.y = 0;
@@ -36,17 +38,16 @@ int main()
     cube_mesh->state = 0;
 
     Mesh *sphere_mesh = renderer3d_load_mesh("assets/sphere.obj");
-    sphere_mesh->world_transform.position.x = 2;
+    sphere_mesh->world_transform.position.x = 3;
     sphere_mesh->world_transform.position.y = 0;
-    sphere_mesh->world_transform.position.z = 0.5;
     sphere_mesh->world_transform.scale = 1;
-    sphere_mesh->state = 0;
+    sphere_mesh->state = 1;
 
     Mesh *complex_mesh = renderer3d_load_mesh("assets/torus.obj");
     complex_mesh->world_transform.position.x = 5;
     complex_mesh->world_transform.position.y = 0;
     complex_mesh->world_transform.scale = 1;
-    complex_mesh->state = 1;
+    complex_mesh->state = 0;
 
     MeshList mesh_list = {
         .meshes = {cube_mesh, sphere_mesh, complex_mesh},
@@ -78,7 +79,7 @@ int main()
 
     RenderList *render_list = malloc(sizeof(RenderList));
 
-    renderer3d_init(&screen);
+    renderer3d_init(&screen, mars_texture);
 
     while (fenster_loop(&f) == 0) {
         int64_t now = fenster_time();
@@ -109,8 +110,8 @@ int main()
 
         memset(f.buf, 0, f.width * f.height * sizeof(uint32_t));
 
-        cube_mesh->world_transform.rotation += delta_time * 0.05;
-        sphere_mesh->world_transform.rotation -= delta_time * 0.01;
+        cube_mesh->world_transform.rotation += delta_time * 0.5;
+        sphere_mesh->world_transform.rotation -= delta_time * 0.5;
         complex_mesh->world_transform.rotation += delta_time * 0.5;
 
         renderer3d_compute_render_list(render_list, &mesh_list, &camera);
