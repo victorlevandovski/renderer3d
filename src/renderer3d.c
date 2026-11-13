@@ -84,16 +84,26 @@ static bool renderer3d_is_transformed_object_in_viewport(const Object* object, c
     return true;
 }
 
+static Vec3 renderer3d_vec3_rotate_xy(Vec3 v, double angle_sin, double angle_cos)
+{
+    return (Vec3) { v.x * angle_cos - v.y * angle_sin, v.x * angle_sin + v.y * angle_cos, v.z };
+}
+
 static void renderer3d_transform_mesh_triangles(const Object *object, const Mesh *mesh, const Camera *camera)
 {
+    double angle = object->world_transform.rotation - camera->transform.rotation;
+    double s = sin(angle);
+    double c = cos(angle);
+
     for (int t = 0; t < mesh->num_triangles; t++) {
         for (int v = 0; v < 3; v++) {
-            const Vec3 vertex_rotated = vec3_rotate_xy(mesh->triangles_local[t].vertices[v].vertex, object->world_transform.rotation - camera->transform.rotation);
-            mesh->triangles_transformed[t].vertices[v].vertex.x = vertex_rotated.x * object->world_transform.scale + object->camera_transform.position.x;
-            mesh->triangles_transformed[t].vertices[v].vertex.y = vertex_rotated.y * object->world_transform.scale + object->camera_transform.position.y;
-            mesh->triangles_transformed[t].vertices[v].vertex.z = vertex_rotated.z * object->world_transform.scale + object->camera_transform.position.z;
-            mesh->triangles_transformed[t].vertices[v].normal = vec3_rotate_xy(mesh->triangles_local[t].vertices[v].normal, object->world_transform.rotation - camera->transform.rotation);
-            mesh->triangles_transformed[t].normal = vec3_rotate_xy(mesh->triangles_local[t].normal, object->world_transform.rotation - camera->transform.rotation);
+            double x_rotated = mesh->triangles_local[t].vertices[v].vertex.x * c - mesh->triangles_local[t].vertices[v].vertex.y * s;
+            double y_rotated = mesh->triangles_local[t].vertices[v].vertex.x * s + mesh->triangles_local[t].vertices[v].vertex.y * c;
+            mesh->triangles_transformed[t].vertices[v].vertex.x = x_rotated * object->world_transform.scale + object->camera_transform.position.x;
+            mesh->triangles_transformed[t].vertices[v].vertex.y = y_rotated * object->world_transform.scale + object->camera_transform.position.y;
+            mesh->triangles_transformed[t].vertices[v].vertex.z = mesh->triangles_local[t].vertices[v].vertex.z * object->world_transform.scale + object->camera_transform.position.z;
+            mesh->triangles_transformed[t].vertices[v].normal = renderer3d_vec3_rotate_xy(mesh->triangles_local[t].vertices[v].normal, s, c);
+            mesh->triangles_transformed[t].normal = renderer3d_vec3_rotate_xy(mesh->triangles_local[t].normal, s, c);
         }
     }
 }
@@ -257,6 +267,7 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
 static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 {
     triangle->area = renderer3d_edge(triangle->vertices[0].vertex, triangle->vertices[1].vertex, triangle->vertices[2].vertex);
+    //if (triangle->area < 0.0) return; // alternative backface culling
     triangle->w_inv_max = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
 
     Vec2 vertices[3];
