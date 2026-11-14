@@ -110,6 +110,20 @@ static bool renderer3d_is_triangle_in_viewport(const Triangle *triangle)
         || is_outer_points_line_crossing_circle(triangle->vertices[0].vertex, triangle->vertices[2].vertex, radius);
 }
 
+static Mesh *renderer3d_select_lod_mesh(Object *object)
+{
+    double distance = vec3_length(object->camera_transform.position);
+    double apparent_size = object->radius * object->world_transform.scale / distance;
+
+    // Should be tweaked based on visuals
+    if (apparent_size < 0.01 && object->meshes[4] != NULL) return object->meshes[4];
+    if (apparent_size < 0.02 && object->meshes[3] != NULL) return object->meshes[3];
+    if (apparent_size < 0.04 && object->meshes[2] != NULL) return object->meshes[2];
+    if (apparent_size < 0.05 && object->meshes[1] != NULL) return object->meshes[1];
+
+    return object->meshes[0];
+}
+
 int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_list, Camera *camera)
 {
     int num_triangles = 0;
@@ -127,7 +141,7 @@ int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_l
         if (!renderer3d_is_transformed_object_in_viewport(object_list->objects[o], camera))
             continue;
 
-        Mesh *mesh = object_list->objects[o]->mesh;
+        Mesh *mesh = renderer3d_select_lod_mesh(object_list->objects[o]);
 
         double rotation_angle = object_list->objects[o]->world_transform.rotation - camera->transform.rotation;
         double rotation_sin = sin(rotation_angle);

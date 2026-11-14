@@ -19,8 +19,16 @@ Object* renderer3d_load_object(char* filename)
         return NULL;
     }
 
-    object->mesh = mesh;
-    object->lod_meshes = NULL;
+    object->meshes[0] = mesh;
+
+    char lod_filename[strlen(filename) + 7];
+    char *dot = strrchr(filename, '.');
+
+    for (int i = 1; i <= MESH_LOD_MAX_LEVELS; i++) {
+        snprintf(lod_filename, sizeof(lod_filename), "%.*s_lod_%d.obj", (int) (dot - filename), filename, i);
+        object->meshes[i] = renderer3d_load_mesh(lod_filename);
+    }
+
     object->num_lod_meshes = 0;
     object->world_transform = TRANSFORM_ZERO;
     object->camera_transform = TRANSFORM_ZERO;

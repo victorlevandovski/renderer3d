@@ -5,6 +5,7 @@
 #include "lib/lib_math.h"
 
 #define OBJECT_LIST_MAX_OBJECTS 1024
+#define MESH_LOD_MAX_LEVELS 4
 #define LIGHT_LIST_MAX_LIGHTS 4
 #define RENDER_LIST_MAX_TRIANGLES 32768
 
@@ -72,8 +73,7 @@ typedef struct {
 } Mesh;
 
 typedef struct {
-    Mesh *mesh;
-    Mesh *lod_meshes;
+    Mesh *meshes[1 + MESH_LOD_MAX_LEVELS]; // main mesh + optional LOD meshes
     unsigned int num_lod_meshes;
     Material *material;
     Transform world_transform;
