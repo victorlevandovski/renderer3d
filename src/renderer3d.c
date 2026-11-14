@@ -84,30 +84,6 @@ static bool renderer3d_is_transformed_object_in_viewport(const Object* object, c
     return true;
 }
 
-static Vec3 renderer3d_vec3_rotate_xy(Vec3 v, double angle_sin, double angle_cos)
-{
-    return (Vec3) { v.x * angle_cos - v.y * angle_sin, v.x * angle_sin + v.y * angle_cos, v.z };
-}
-
-static void renderer3d_transform_mesh_triangles(const Object *object, const Mesh *mesh, const Camera *camera)
-{
-    double angle = object->world_transform.rotation - camera->transform.rotation;
-    double s = sin(angle);
-    double c = cos(angle);
-
-    for (int t = 0; t < mesh->num_triangles; t++) {
-        for (int v = 0; v < 3; v++) {
-            double x_rotated = mesh->triangles_local[t].vertices[v].vertex.x * c - mesh->triangles_local[t].vertices[v].vertex.y * s;
-            double y_rotated = mesh->triangles_local[t].vertices[v].vertex.x * s + mesh->triangles_local[t].vertices[v].vertex.y * c;
-            mesh->triangles_transformed[t].vertices[v].vertex.x = x_rotated * object->world_transform.scale + object->camera_transform.position.x;
-            mesh->triangles_transformed[t].vertices[v].vertex.y = y_rotated * object->world_transform.scale + object->camera_transform.position.y;
-            mesh->triangles_transformed[t].vertices[v].vertex.z = mesh->triangles_local[t].vertices[v].vertex.z * object->world_transform.scale + object->camera_transform.position.z;
-            mesh->triangles_transformed[t].vertices[v].normal = renderer3d_vec3_rotate_xy(mesh->triangles_local[t].vertices[v].normal, s, c);
-            mesh->triangles_transformed[t].normal = renderer3d_vec3_rotate_xy(mesh->triangles_local[t].normal, s, c);
-        }
-    }
-}
-
 static double viewport_k, viewport_k2;
 
 /* Candidate for performance optimization */
@@ -153,21 +129,52 @@ int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_l
 
         Mesh *mesh = object_list->objects[o]->mesh;
 
-        renderer3d_transform_mesh_triangles(object_list->objects[o], mesh, camera);
+        double rotation_angle = object_list->objects[o]->world_transform.rotation - camera->transform.rotation;
+        double rotation_sin = sin(rotation_angle);
+        double rotation_cos = cos(rotation_angle);
 
         for (int t = 0; t < mesh->num_triangles; t++) {
-            Vec3 camera_normal = vec3_average(
-                mesh->triangles_transformed[t].vertices[0].vertex,
-                mesh->triangles_transformed[t].vertices[1].vertex,
-                mesh->triangles_transformed[t].vertices[2].vertex
-            );
+            // Begin rotating the average normal, rotate only the Y first so we can run a fast discard check
+            mesh->triangles_transformed[t].normal.y = mesh->triangles_local[t].normal.x * rotation_sin + mesh->triangles_local[t].normal.y * rotation_cos;
+
+            // Early discard of triangles that point away from camera. The number might need tweaking.
+            // Also it is possible to calculate the number per-mesh based on how far it is in front of a camera.
+            // Far objects in the middle of the camera may use pretty aggressive values like 0.01-0.05
+            if (mesh->triangles_transformed[t].normal.y > 0.3)
+                continue;
+
+            // Finish the average normal rotation
+            mesh->triangles_transformed[t].normal.x = mesh->triangles_local[t].normal.x * rotation_cos - mesh->triangles_local[t].normal.y * rotation_sin;
+
+            // Translate/rotate everything else
+            for (int v = 0; v < 3; v++) {
+                double x_rotated = mesh->triangles_local[t].vertices[v].vertex.x * rotation_cos - mesh->triangles_local[t].vertices[v].vertex.y * rotation_sin;
+                double y_rotated = mesh->triangles_local[t].vertices[v].vertex.x * rotation_sin + mesh->triangles_local[t].vertices[v].vertex.y * rotation_cos;
+                mesh->triangles_transformed[t].vertices[v].vertex.x = x_rotated * object_list->objects[o]->world_transform.scale + object_list->objects[o]->camera_transform.position.x;
+                mesh->triangles_transformed[t].vertices[v].vertex.y = y_rotated * object_list->objects[o]->world_transform.scale + object_list->objects[o]->camera_transform.position.y;
+                mesh->triangles_transformed[t].vertices[v].vertex.z = mesh->triangles_local[t].vertices[v].vertex.z * object_list->objects[o]->world_transform.scale + object_list->objects[o]->camera_transform.position.z;
+                mesh->triangles_transformed[t].vertices[v].normal.x = mesh->triangles_local[t].vertices[v].normal.x * rotation_cos - mesh->triangles_local[t].vertices[v].normal.y * rotation_sin;
+                mesh->triangles_transformed[t].vertices[v].normal.y = mesh->triangles_local[t].vertices[v].normal.x * rotation_sin + mesh->triangles_local[t].vertices[v].normal.y * rotation_cos;
+            }
 
             // todo: additionally check if mesh is fully in viewport to skip per-triangle check
             if (!renderer3d_is_triangle_in_viewport(&mesh->triangles_transformed[t]))
                 continue;
 
-            if (vec3_angle(camera_normal, mesh->triangles_transformed[t].normal) <= M_PI_2) {
-                continue;
+            // Same as quick discard, but the opposite.
+            // If a normal already looking in a general direction of a camera, we can quickly accept it.
+            // Number can be calculated per-mesh so it can be more aggressive for objects straight in front of camera.
+            if (mesh->triangles_transformed[t].normal.y > -0.5) {
+                Vec3 camera_normal = vec3_average(
+                    mesh->triangles_transformed[t].vertices[0].vertex,
+                    mesh->triangles_transformed[t].vertices[1].vertex,
+                    mesh->triangles_transformed[t].vertices[2].vertex
+                );
+
+                // Proper backface culling
+                if (vec3_angle(camera_normal, mesh->triangles_transformed[t].normal) <= M_PI_2) {
+                    continue;
+                }
             }
 
             mesh->triangles_transformed[t].material = object_list->objects[o]->material;
