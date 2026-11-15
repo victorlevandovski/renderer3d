@@ -76,6 +76,7 @@ double remap(double source_from, double source_to, double destination_from, doub
 float remapf(float source_from, float source_to, float destination_from, float destination_to, float value);
 
 double lerp(double from, double to, double t);
+int maxi(int a, int b);
 
 double rand_between(double min, double max);
 

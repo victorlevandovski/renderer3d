@@ -25,13 +25,18 @@ typedef struct {
 } Col3i;
 
 typedef struct {
+    uint8_t r, g, b, a;
+} Col4i;
+
+typedef struct {
     uint32_t *data;
     unsigned int width;
     unsigned int height;
 } Bitmap;
 
 typedef struct {
-    Bitmap bitmap;
+    Bitmap bitmaps[12]; // up to 2k
+    int num_bitmaps;
 } Texture;
 
 typedef struct {
@@ -119,7 +124,11 @@ extern Col3i COL3I_WHITE;
 static double *z_buffer;
 
 #define pixel(s, x, y) ((s)->buffer[(((s)->height - (y) - 1) * (s)->width) + (x)])
+
 #define col3i_to_uint32_t(c) (((uint32_t) (c).r << 16) | ((uint32_t) (c).g << 8) | (c).b)
+#define col4i_to_uint32_t(c) (((uint32_t) (c).a << 24) | ((uint32_t) (c).r << 16) | ((uint32_t) (c).g << 8) | (c).b)
+#define uint32_t_to_col3i(u) ((Col3i) { .r = (uint8_t) (((u) >> 16) & 0xff), .g = (uint8_t) (((u) >> 8) & 0xff), .b = (uint8_t) ((u) & 0xff) })
+#define uint32_t_to_col4i(u) ((Col4i) { .r = (uint8_t) (((u) >> 16) & 0xff), .g = (uint8_t) (((u) >> 8) & 0xff), .b = (uint8_t) ((u) & 0xff), .a = (uint8_t) (((u) >> 24) & 0xff) })
 
 Mesh* renderer3d_load_mesh(char* filename);
 Texture* renderer3d_shader_load_texture(char* filename);

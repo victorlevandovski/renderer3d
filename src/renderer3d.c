@@ -334,13 +334,15 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
             uv_x = clamp(uv_x, 0.0, 1.0);
             uv_y = clamp(uv_y, 0.0, 1.0);
 
-            int t_x = (int) floor(uv_x * triangle->material->texture->bitmap.width);
-            int t_y = (int) floor(uv_y * triangle->material->texture->bitmap.height);
+            int mipmap = 0; // to be calculated...
 
-            uint32_t color = triangle->material->texture->bitmap.data[t_y * triangle->material->texture->bitmap.width + t_x];
-            uint8_t r = (color >> 16) & 0xFF;
-            uint8_t g = (color >>  8) & 0xFF;
-            uint8_t b = color & 0xFF;
+            int t_x = (int) (uv_x * triangle->material->texture->bitmaps[mipmap].width);
+            int t_y = (int) (uv_y * triangle->material->texture->bitmaps[mipmap].height);
+
+            uint32_t color = triangle->material->texture->bitmaps[mipmap].data[t_y * triangle->material->texture->bitmaps[mipmap].width + t_x];
+            uint8_t r = (color >> 16) & 0xff;
+            uint8_t g = (color >> 8) & 0xff;
+            uint8_t b = color & 0xff;
 
             c3i.r = (uint8_t) floor(light * r);
             c3i.g = (uint8_t) floor(light * g);

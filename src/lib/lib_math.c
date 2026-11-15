@@ -161,6 +161,11 @@ double lerp(double from, double to, double t)
     return from + (to - from) * t;
 }
 
+int maxi(int a, int b)
+{
+    return (a > b) ? a : b;
+}
+
 double normalize_angle(double a)
 {
     return fmod(a, M_PI * 2.0);
