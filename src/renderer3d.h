@@ -10,6 +10,7 @@
 #define RENDER_LIST_MAX_TRIANGLES 32768
 
 #define WIREFRAME_COLOR 0x7744bb
+#define OVERRIDE_SHADING_COLOR 0
 
 typedef struct {
     uint32_t *buffer;

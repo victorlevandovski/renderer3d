@@ -226,6 +226,13 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
     if (x_from < 0) x_from = 0;
     if (x_to > screen->width - 1) x_to = screen->width - 1;
 
+    if (OVERRIDE_SHADING_COLOR && override_color > 0) {
+        for (int x = x_from; x <= x_to; x++) {
+            pixel(screen, x, y) = override_color;
+        }
+        return;
+    }
+
     for (int x = x_from; x <= x_to; x++) {
         // Quick discard.
         // Todo: see if it helps or steals FPS when rendering actual models
@@ -255,9 +262,12 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
         Col3i c3i = COL3I_BLACK;
 
         if (triangle->material->texture) {
-            //renderer_texture
-            double uv_x = weight_0 * triangle->vertices[0].uv.x + weight_1 * triangle->vertices[1].uv.x + weight_2 * triangle->vertices[2].uv.x;
-            double uv_y = weight_0 * triangle->vertices[0].uv.y + weight_1 * triangle->vertices[1].uv.y + weight_2 * triangle->vertices[2].uv.y;
+            double uv_x_w = weight_0 * (triangle->vertices[0].uv.x / triangle->vertices[0].vertex.z) + weight_1 * (triangle->vertices[1].uv.x / triangle->vertices[1].vertex.z) + weight_2 * (triangle->vertices[2].uv.x / triangle->vertices[2].vertex.z);
+            double uv_y_w = weight_0 * (triangle->vertices[0].uv.y / triangle->vertices[0].vertex.z) + weight_1 * (triangle->vertices[1].uv.y / triangle->vertices[1].vertex.z) + weight_2 * (triangle->vertices[2].uv.y / triangle->vertices[2].vertex.z);
+            double uv_x = uv_x_w / p_w_inv;
+            double uv_y = uv_y_w / p_w_inv;
+
+            // Todo: allow UV scaling
             uv_x = clamp(uv_x, 0.0, 1.0);
             uv_y = clamp(uv_y, 0.0, 1.0);
 
@@ -265,11 +275,9 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
             unsigned int t_y = (unsigned int) floor(uv_y * triangle->material->texture->bitmap.height);
 
             uint32_t color = triangle->material->texture->bitmap.data[t_y * triangle->material->texture->bitmap.width + t_x];
-            //uint8_t a = (color >> 24) & 0xFF;
             uint8_t r = (color >> 16) & 0xFF;
             uint8_t g = (color >>  8) & 0xFF;
-            uint8_t b =  color        & 0xFF;
-
+            uint8_t b = color & 0xFF;
 
             c3i.r = (uint8_t) floor(light * r);
             c3i.g = (uint8_t) floor(light * g);
@@ -288,7 +296,8 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
 static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 {
     triangle->area = renderer3d_edge(triangle->vertices[0].vertex, triangle->vertices[1].vertex, triangle->vertices[2].vertex);
-    //if (triangle->area < 0.0) return; // alternative backface culling
+    if (triangle->area < 0.0) return; // alternative backface culling
+
     triangle->w_inv_max = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
 
     Vec2 vertices[3];
