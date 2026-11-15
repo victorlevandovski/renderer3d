@@ -156,6 +156,11 @@ float remapf(float source_from, float source_to, float destination_from, float d
     return destination_from + (destination_to - destination_from) * t;
 }
 
+double lerp(double from, double to, double t)
+{
+    return from + (to - from) * t;
+}
+
 double normalize_angle(double a)
 {
     return fmod(a, M_PI * 2.0);

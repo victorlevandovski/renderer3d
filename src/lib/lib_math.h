@@ -75,6 +75,8 @@ double vec3_angle_xy(Vec3 v);
 double remap(double source_from, double source_to, double destination_from, double destination_to, double value);
 float remapf(float source_from, float source_to, float destination_from, float destination_to, float value);
 
+double lerp(double from, double to, double t);
+
 double rand_between(double min, double max);
 
 double normalize_angle(double a);

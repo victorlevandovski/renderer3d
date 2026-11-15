@@ -215,7 +215,7 @@ static void renderer3d_rasterize_triangle_wireframe(const Triangle *triangle, Sc
     render_line(screen, v1, v3, WIREFRAME_COLOR, false);
 }
 
-static double renderer3d_edge(const Vec3 a, const Vec3 b, const Vec3 c)
+static double renderer3d_area(const Vec3 a, const Vec3 b, const Vec3 c)
 {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
@@ -233,46 +233,109 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
         return;
     }
 
+    // We will interpolate the pixels data in the line from the data at x_from and x_to.
+
+    // First, make sure there is no division by zero. Not sure how naive this approach is.
+    if (equals_approx(triangle->vertices[0].vertex.z, 0.0)) triangle->vertices[0].vertex.z = EPSILON;
+    if (equals_approx(triangle->vertices[1].vertex.z, 0.0)) triangle->vertices[1].vertex.z = EPSILON;
+    if (equals_approx(triangle->vertices[2].vertex.z, 0.0)) triangle->vertices[2].vertex.z = EPSILON;
+
+    //
+    // Calculate all the stuff for the start point
+    //
+
+    double start_weight_0, start_weight_1, start_weight_2;
+
+    if (fabs(triangle->area) > 3.0) {
+        Vec3 p = { (double) x_from, (double) y, 0.0 };
+        start_weight_0 = renderer3d_area(triangle->vertices[1].vertex, triangle->vertices[2].vertex, p) / triangle->area;
+        start_weight_1 = renderer3d_area(triangle->vertices[2].vertex, triangle->vertices[0].vertex, p) / triangle->area;
+        start_weight_2 = renderer3d_area(triangle->vertices[0].vertex, triangle->vertices[1].vertex, p) / triangle->area;
+    } else {
+        // simple approximation for small triangles
+        start_weight_0 = start_weight_1 = start_weight_2 = M_1_3;
+    }
+
+    double start_w_inv = start_weight_0 * triangle->vertices[0].w_inv + start_weight_1 * triangle->vertices[1].w_inv + start_weight_2 * triangle->vertices[2].w_inv;
+
+    double start_uv_x_w = start_weight_0 * (triangle->vertices[0].uv.x / triangle->vertices[0].vertex.z)
+                        + start_weight_1 * (triangle->vertices[1].uv.x / triangle->vertices[1].vertex.z)
+                        + start_weight_2 * (triangle->vertices[2].uv.x / triangle->vertices[2].vertex.z);
+    double start_uv_y_w = start_weight_0 * (triangle->vertices[0].uv.y / triangle->vertices[0].vertex.z)
+                        + start_weight_1 * (triangle->vertices[1].uv.y / triangle->vertices[1].vertex.z)
+                        + start_weight_2 * (triangle->vertices[2].uv.y / triangle->vertices[2].vertex.z);
+
+    double start_light_w    = start_weight_0 * triangle->vertices[0].light / triangle->vertices[0].vertex.z
+                            + start_weight_1 * triangle->vertices[1].light / triangle->vertices[1].vertex.z
+                            + start_weight_2 * triangle->vertices[2].light / triangle->vertices[2].vertex.z;
+
+    //
+    // Calculate all the stuff for the end point
+    //
+
+    double end_weight_0, end_weight_1, end_weight_2;
+
+    if (fabs(triangle->area) > 3.0) {
+        Vec3 p = { (double) x_to, (double) y, 0.0 };
+        end_weight_0 = renderer3d_area(triangle->vertices[1].vertex, triangle->vertices[2].vertex, p) / triangle->area;
+        end_weight_1 = renderer3d_area(triangle->vertices[2].vertex, triangle->vertices[0].vertex, p) / triangle->area;
+        end_weight_2 = renderer3d_area(triangle->vertices[0].vertex, triangle->vertices[1].vertex, p) / triangle->area;
+    } else {
+        // simple approximation for small triangles
+        end_weight_0 = end_weight_1 = end_weight_2 = M_1_3;
+    }
+
+    double end_w_inv = end_weight_0 * triangle->vertices[0].w_inv + end_weight_1 * triangle->vertices[1].w_inv + end_weight_2 * triangle->vertices[2].w_inv;
+
+    double end_uv_x_w   = end_weight_0 * (triangle->vertices[0].uv.x / triangle->vertices[0].vertex.z)
+                        + end_weight_1 * (triangle->vertices[1].uv.x / triangle->vertices[1].vertex.z)
+                        + end_weight_2 * (triangle->vertices[2].uv.x / triangle->vertices[2].vertex.z);
+    double end_uv_y_w   = end_weight_0 * (triangle->vertices[0].uv.y / triangle->vertices[0].vertex.z)
+                        + end_weight_1 * (triangle->vertices[1].uv.y / triangle->vertices[1].vertex.z)
+                        + end_weight_2 * (triangle->vertices[2].uv.y / triangle->vertices[2].vertex.z);
+
+    double end_light_w  = end_weight_0 * triangle->vertices[0].light / triangle->vertices[0].vertex.z
+                        + end_weight_1 * triangle->vertices[1].light / triangle->vertices[1].vertex.z
+                        + end_weight_2 * triangle->vertices[2].light / triangle->vertices[2].vertex.z;
+
+    /*
+     * Let's do the interpolation
+     */
+
+    int steps = x_to - x_from + 1;
+
+    double p_w_inv = start_w_inv;
+    double w_inv_delta = (end_w_inv - start_w_inv) / steps;
+
+    double p_light_w = start_light_w;
+    double light_w_delta = (end_light_w - start_light_w) / steps;
+
+    double p_uv_x_w = start_uv_x_w;
+    double uv_x_w_delta = (end_uv_x_w - start_uv_x_w) / steps;
+
+    double p_uv_y_w = start_uv_y_w;
+    double uv_y_w_delta = (end_uv_y_w - start_uv_y_w) / steps;
+
+
     for (int x = x_from; x <= x_to; x++) {
-        // Quick discard.
-        // Todo: see if it helps or steals FPS when rendering actual models
-        // Also we can assign relative z values to entire meshes, if they can be quickly sorted by depth + radius
-        if (z_buffer[screen->width * y + x] > triangle->w_inv_max) continue;
+        if (p_w_inv > 10.0) goto increment_values; // kind of a near plane clipping
+        if (z_buffer[screen->width * y + x] > p_w_inv) goto increment_values;
 
-        double weight_0, weight_1, weight_2;
-
-        if (fabs(triangle->area) > 6.0) {
-            Vec3 p = { (double) x, (double) y, 0.0 };
-            weight_0 = renderer3d_edge(triangle->vertices[1].vertex, triangle->vertices[2].vertex, p) / triangle->area;
-            weight_1 = renderer3d_edge(triangle->vertices[2].vertex, triangle->vertices[0].vertex, p) / triangle->area;
-            weight_2 = renderer3d_edge(triangle->vertices[0].vertex, triangle->vertices[1].vertex, p) / triangle->area;
-        } else {
-            // simple approximation for small triangles
-            weight_0 = weight_1 = weight_2 = M_1_3;
-        }
-
-        double p_w_inv = weight_0 * triangle->vertices[0].w_inv + weight_1 * triangle->vertices[1].w_inv + weight_2 * triangle->vertices[2].w_inv;
-        p_w_inv = clamp(p_w_inv, 0.0, 1.0);
-
-        if (z_buffer[screen->width * y + x] > p_w_inv) continue;
-
-        double light = weight_0 * triangle->vertices[0].light + weight_1 * triangle->vertices[1].light + weight_2 * triangle->vertices[2].light;
+        double light = p_light_w / p_w_inv;
         light = clamp(light, 0.0, 1.0);
 
         Col3i c3i = COL3I_BLACK;
 
         if (triangle->material->texture) {
-            double uv_x_w = weight_0 * (triangle->vertices[0].uv.x / triangle->vertices[0].vertex.z) + weight_1 * (triangle->vertices[1].uv.x / triangle->vertices[1].vertex.z) + weight_2 * (triangle->vertices[2].uv.x / triangle->vertices[2].vertex.z);
-            double uv_y_w = weight_0 * (triangle->vertices[0].uv.y / triangle->vertices[0].vertex.z) + weight_1 * (triangle->vertices[1].uv.y / triangle->vertices[1].vertex.z) + weight_2 * (triangle->vertices[2].uv.y / triangle->vertices[2].vertex.z);
-            double uv_x = uv_x_w / p_w_inv;
-            double uv_y = uv_y_w / p_w_inv;
+            double uv_x = p_uv_x_w / p_w_inv;
+            double uv_y = p_uv_y_w / p_w_inv;
 
             // Todo: allow UV scaling
             uv_x = clamp(uv_x, 0.0, 1.0);
             uv_y = clamp(uv_y, 0.0, 1.0);
 
-            unsigned int t_x = (unsigned int) floor(uv_x * triangle->material->texture->bitmap.width);
-            unsigned int t_y = (unsigned int) floor(uv_y * triangle->material->texture->bitmap.height);
+            int t_x = (int) floor(uv_x * triangle->material->texture->bitmap.width);
+            int t_y = (int) floor(uv_y * triangle->material->texture->bitmap.height);
 
             uint32_t color = triangle->material->texture->bitmap.data[t_y * triangle->material->texture->bitmap.width + t_x];
             uint8_t r = (color >> 16) & 0xFF;
@@ -290,12 +353,18 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
 
         pixel(screen, x, y) = col3i_to_uint32_t(c3i);
         z_buffer[screen->width * y + x] = p_w_inv;
+
+        increment_values:
+        p_w_inv += w_inv_delta;
+        p_light_w += light_w_delta;
+        p_uv_x_w += uv_x_w_delta;
+        p_uv_y_w += uv_y_w_delta;
     }
 }
 
 static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 {
-    triangle->area = renderer3d_edge(triangle->vertices[0].vertex, triangle->vertices[1].vertex, triangle->vertices[2].vertex);
+    triangle->area = renderer3d_area(triangle->vertices[0].vertex, triangle->vertices[1].vertex, triangle->vertices[2].vertex);
     if (triangle->area < 0.0) return; // alternative backface culling
 
     triangle->w_inv_max = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
