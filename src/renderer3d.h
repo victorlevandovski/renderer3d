@@ -35,8 +35,8 @@ typedef struct {
 } Bitmap;
 
 typedef struct {
-    Bitmap bitmaps[12]; // up to 2k
-    int num_bitmaps;
+    Bitmap mipmaps[12]; // up to 2k
+    int num_mipmaps;
 } Texture;
 
 typedef struct {
@@ -60,6 +60,8 @@ typedef struct {
     double area;
     int attributes;
     Material *material;
+    int mipmap_levels[2]; // levels point to indices of mipmaps to use
+    double mipmap_multipliers[2]; // multipliers define how much of each mipmap to apply to a final texel color, add up to 1.0
 } Triangle;
 
 typedef struct {

@@ -121,6 +121,11 @@ double vec3_length(Vec3 v)
     return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
+double vec3_length_xy(Vec3 v)
+{
+    return sqrt(v.x * v.x + v.y * v.y);
+}
+
 double vec3_dot(Vec3 a, Vec3 b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
@@ -164,6 +169,11 @@ double lerp(double from, double to, double t)
 int maxi(int a, int b)
 {
     return (a > b) ? a : b;
+}
+
+int mini(int a, int b)
+{
+    return (a < b) ? a : b;
 }
 
 double normalize_angle(double a)

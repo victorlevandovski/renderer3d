@@ -68,6 +68,7 @@ Vec3 vec3_normalize(Vec3 v);
 Vec3 vec3_rotate_xy(Vec3 v, double angle);
 Vec3 vec3_average(Vec3 a, Vec3 b, Vec3 c);
 double vec3_length(Vec3 v);
+double vec3_length_xy(Vec3 v);
 double vec3_dot(Vec3 a, Vec3 b);
 double vec3_angle(Vec3 a, Vec3 b);
 double vec3_angle_xy(Vec3 v);
@@ -77,6 +78,7 @@ float remapf(float source_from, float source_to, float destination_from, float d
 
 double lerp(double from, double to, double t);
 int maxi(int a, int b);
+int mini(int a, int b);
 
 double rand_between(double min, double max);
 

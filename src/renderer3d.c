@@ -113,6 +113,10 @@ static bool renderer3d_is_triangle_in_viewport(const Triangle *triangle)
 static Mesh *renderer3d_select_lod_mesh(Object *object)
 {
     double distance = vec3_length(object->camera_transform.position);
+
+    if (distance < 1.0)
+        return object->meshes[0];
+
     double apparent_size = object->radius * object->world_transform.scale / distance;
 
     // Should be tweaked based on visuals
@@ -218,6 +222,30 @@ static void renderer3d_rasterize_triangle_wireframe(const Triangle *triangle, Sc
 static double renderer3d_area(const Vec3 a, const Vec3 b, const Vec3 c)
 {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+static Col3i renderer3d_get_texel_color(Triangle *triangle, double uv_x, double uv_y)
+{
+    uint16_t r = 0, g = 0, b = 0;
+
+    for (int i = 0; i < 2; i++) {
+        if (triangle->mipmap_multipliers[i] > EPSILON) {
+            int t_x = (int) (uv_x * triangle->material->texture->mipmaps[triangle->mipmap_levels[i]].width);
+            int t_y = (int) (uv_y * triangle->material->texture->mipmaps[triangle->mipmap_levels[i]].height);
+            uint32_t t_color = triangle->material->texture->mipmaps[triangle->mipmap_levels[i]].data[
+                (triangle->material->texture->mipmaps[triangle->mipmap_levels[i]].height - t_y) * triangle->material->texture->mipmaps[triangle->mipmap_levels[i]].width + t_x
+            ];
+            r += (uint8_t) (((t_color >> 16) & 0xff) * triangle->mipmap_multipliers[i]);
+            g += (uint8_t) (((t_color >> 8) & 0xff) * triangle->mipmap_multipliers[i]);
+            b += (uint8_t) ((t_color & 0xff) * triangle->mipmap_multipliers[i]);
+        }
+    }
+
+    return (Col3i) {
+        .r = (uint8_t) clamp(r, 0, 255),
+        .g = (uint8_t) clamp(g, 0, 255),
+        .b = (uint8_t) clamp(b, 0, 255),
+    };
 }
 
 static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, int x_from, int x_to, uint32_t override_color)
@@ -334,19 +362,11 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
             uv_x = clamp(uv_x, 0.0, 1.0);
             uv_y = clamp(uv_y, 0.0, 1.0);
 
-            int mipmap = 0; // to be calculated...
-
-            int t_x = (int) (uv_x * triangle->material->texture->bitmaps[mipmap].width);
-            int t_y = (int) (uv_y * triangle->material->texture->bitmaps[mipmap].height);
-
-            uint32_t color = triangle->material->texture->bitmaps[mipmap].data[t_y * triangle->material->texture->bitmaps[mipmap].width + t_x];
-            uint8_t r = (color >> 16) & 0xff;
-            uint8_t g = (color >> 8) & 0xff;
-            uint8_t b = color & 0xff;
-
-            c3i.r = (uint8_t) floor(light * r);
-            c3i.g = (uint8_t) floor(light * g);
-            c3i.b = (uint8_t) floor(light * b);
+            //Col4i
+            Col3i texel_color = renderer3d_get_texel_color(triangle, uv_x, uv_y);
+            c3i.r = (uint8_t) floor(light * texel_color.r);
+            c3i.g = (uint8_t) floor(light * texel_color.g);
+            c3i.b = (uint8_t) floor(light * texel_color.b);
         } else {
             c3i.r = (uint8_t) floor(light * triangle->material->ambient_color.r);
             c3i.g = (uint8_t) floor(light * triangle->material->ambient_color.g);
@@ -362,6 +382,88 @@ static void rasterize_triangle_line(Triangle *triangle, Screen *screen, int y, i
         p_uv_x_w += uv_x_w_delta;
         p_uv_y_w += uv_y_w_delta;
     }
+}
+
+static void renderer3d_calculate_triangle_mipmap_levels(Triangle *triangle)
+{
+    if (!triangle->material->texture) return;
+
+    // pixels
+
+    double x_min = triangle->vertices[0].vertex.x;
+    if (triangle->vertices[1].vertex.x < x_min) { x_min = triangle->vertices[1].vertex.x; }
+    if (triangle->vertices[2].vertex.x < x_min) { x_min = triangle->vertices[2].vertex.x; }
+
+    double x_max = triangle->vertices[0].vertex.x;
+    if (triangle->vertices[1].vertex.x > x_max) { x_max = triangle->vertices[1].vertex.x; }
+    if (triangle->vertices[2].vertex.x > x_max) { x_max = triangle->vertices[2].vertex.x; }
+
+    double y_min = triangle->vertices[0].vertex.y;
+    if (triangle->vertices[1].vertex.y < y_min) { y_min = triangle->vertices[1].vertex.y; }
+    if (triangle->vertices[2].vertex.y < y_min) { y_min = triangle->vertices[2].vertex.y; }
+
+    double y_max = triangle->vertices[0].vertex.y;
+    if (triangle->vertices[1].vertex.y > y_max) { y_max = triangle->vertices[1].vertex.y; }
+    if (triangle->vertices[2].vertex.y > y_max) { y_max = triangle->vertices[2].vertex.y; }
+
+    // uvs
+
+    double uv_x_min = triangle->vertices[0].uv.x;
+    if (triangle->vertices[1].uv.x < uv_x_min) { uv_x_min = triangle->vertices[1].uv.x; }
+    if (triangle->vertices[2].uv.x < uv_x_min) { uv_x_min = triangle->vertices[2].uv.x; }
+
+    double uv_x_max = triangle->vertices[0].uv.x;
+    if (triangle->vertices[1].uv.x > uv_x_max) { uv_x_max = triangle->vertices[1].uv.x; }
+    if (triangle->vertices[2].uv.x > uv_x_max) { uv_x_max = triangle->vertices[2].uv.x; }
+
+    double uv_y_min = triangle->vertices[0].uv.y;
+    if (triangle->vertices[1].uv.y < uv_y_min) { uv_y_min = triangle->vertices[1].uv.y; }
+    if (triangle->vertices[2].uv.y < uv_y_min) { uv_y_min = triangle->vertices[2].uv.y; }
+
+    double uv_y_max = triangle->vertices[0].uv.y;
+    if (triangle->vertices[1].uv.y > uv_y_max) { uv_y_max = triangle->vertices[1].uv.y; }
+    if (triangle->vertices[2].uv.y > uv_y_max) { uv_y_max = triangle->vertices[2].uv.y; }
+
+    double d_x = x_max - x_min;
+    double d_y = y_max - y_min;
+    double d_uv_x = uv_x_max - uv_x_min;
+    double d_uv_y = uv_y_max - uv_y_min;
+
+    double pixels = fmax(d_x, d_y);
+    double texels = fmax(d_uv_x * triangle->material->texture->mipmaps[0].width, d_uv_y * triangle->material->texture->mipmaps[0].height);
+
+    double lambda =log2(texels / pixels) * 1.1; // 1.25 might be better if 1.1 is too jittery
+
+    if (lambda <= 0.0) {
+        triangle->mipmap_levels[0] = 0;
+        triangle->mipmap_multipliers[0] = 1.0;
+        triangle->mipmap_multipliers[1] = 0.0;
+        return;
+    }
+
+    int lambda_int = (int) lambda;
+    double lambda_fraction = lambda - (int) lambda;
+
+    if (lambda_int < triangle->material->texture->num_mipmaps - 1) {
+        triangle->mipmap_levels[0] = lambda_int;
+        triangle->mipmap_levels[1] = lambda_int + 1;
+        triangle->mipmap_multipliers[0] = 1.0 - lambda_fraction;
+        triangle->mipmap_multipliers[1] = lambda_fraction;
+        return;
+    }
+
+    if (lambda_int < triangle->material->texture->num_mipmaps) {
+        triangle->mipmap_levels[0] = lambda_int;
+        triangle->mipmap_levels[1] = -1;
+        triangle->mipmap_multipliers[0] = 1.0;
+        triangle->mipmap_multipliers[1] = 0.0;
+        return;
+    }
+
+    triangle->mipmap_levels[0] = triangle->material->texture->num_mipmaps - 1;
+    triangle->mipmap_levels[1] = -1;
+    triangle->mipmap_multipliers[0] = 1.0;
+    triangle->mipmap_multipliers[1] = 0.0;
 }
 
 static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
@@ -385,6 +487,8 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
     if (vertices[2].y < vertices[1].y) { swap(vertices[1], vertices[2], tmp); }
     if (vertices[1].y < vertices[0].y) { swap(vertices[0], vertices[1], tmp); }
     if (vertices[2].y < vertices[1].y) { swap(vertices[1], vertices[2], tmp); }
+
+    renderer3d_calculate_triangle_mipmap_levels(triangle);
 
     int dy_01 = ((int) ceil(vertices[1].y) + 0) - (int) ceil(vertices[0].y);
     int dy_12 = ((int) ceil(vertices[2].y) + 0) - (int) ceil(vertices[1].y);
