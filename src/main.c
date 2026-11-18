@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-//#include "fenster.h"
 #include "lib/fenster_ext.h"
 
 #include "renderer3d.h"
@@ -84,8 +83,9 @@ int main()
     //sun.world_transform.rotation = M_PI_2 * 0.5;
     camera.transform.rotation = 0.0;
 
-    double camera_speed = 1.0;
+    double camera_speed = 10.0;
     double camera_rotation_speed = 0.5; // rad/s
+    double camera_zoom_speed = 10.0; // fov deg/s
 
     RenderList *render_list = malloc(sizeof(RenderList));
 
@@ -118,6 +118,15 @@ int main()
         if (f.keys[81]) camera.transform.rotation += delta_time * camera_rotation_speed;
         if (f.keys[69]) camera.transform.rotation -= delta_time * camera_rotation_speed;
 
+        if (f.keys[91]) {
+            camera.fov += delta_time * camera_zoom_speed;
+            camera.fov = fmin(camera.fov, 60.0);
+        }
+        if (f.keys[93]) {
+            camera.fov -= delta_time * camera_zoom_speed;
+            camera.fov = fmax(camera.fov, 0.1);
+        }
+
         memset(f.buf, 0, f.width * f.height * sizeof(uint32_t));
 
         cube_object->world_transform.rotation += delta_time * 0.5;
@@ -129,7 +138,7 @@ int main()
         snprintf(label_stats, sizeof(label_stats), "TRIS: %d", render_list->num_triangles);
         fenster_text(&f, 8, 24, label_stats, 2, 0x666666);
 
-        snprintf(label_debug, sizeof(label_debug), "CAM  P: %.1f %.1f  R: %.1f", camera.transform.position.x, camera.transform.position.y, camera.transform.rotation);
+        snprintf(label_debug, sizeof(label_debug), "CAM  P: %.1f %.1f  R: %.1f  FOV: %.1f", camera.transform.position.x, camera.transform.position.y, camera.transform.rotation, camera.fov);
         fenster_text(&f, 8, 48, label_debug, 2, 0x666666);
 
         if (now - last > 999) {

@@ -575,6 +575,8 @@ void renderer3d_render(const RenderList *render_list, LightList *light_list, Cam
 {
     memset(z_buffer, 0, screen->width * screen->height * sizeof(double));
 
+    renderer3d_render_background(camera, screen);
+
     viewport_d = 1.0 / tan(camera->fov * DEG2RAD * 0.5);
     viewport_d *= screen->height_2;
 
@@ -591,5 +593,87 @@ void renderer3d_render(const RenderList *render_list, LightList *light_list, Cam
         renderer3d_compute_triangle_lighting(render_list->triangles[i], light_list);
         renderer3d_compute_triangle_for_rasterization(render_list->triangles[i], camera, screen);
         renderer3d_render_triangle(render_list->triangles[i], screen);
+    }
+
+    if (0)
+    for (int i = 0; i < 10000; i++) {
+        int x = rand_between(0, screen->width - 1);
+        int y = rand_between(0, screen->height - 1);
+        int intensity = rand_between(0, 48);
+        uint32_t p = pixel(screen, x, y);
+        Col3i c = uint32_t_to_col3i(p);
+        c.r = c.r > 128 ? mini(c.r + intensity, 255) : mini(c.r + intensity * 2, 255);
+        c.g = c.g > 128 ? mini(c.g + intensity, 255) : mini(c.g + intensity * 2, 255);
+        c.r = c.b > 128 ? mini(c.b + intensity, 255) : mini(c.b + intensity * 2, 255);
+        pixel(screen, x, y) = col3i_to_uint32_t(c);
+    }
+}
+
+static int random_seed = 0;
+
+static float renderer3d_random_float(float min, float max)
+{
+    double number = 99998311.0 / (random_seed * 7.0);
+    random_seed += 7;
+    double fraction = number - ((int) number);
+
+    return min + (float) ((max - min) * fraction);
+}
+
+void renderer3d_render_background(Camera *camera, Screen *screen)
+{
+    int section_deg = 1;
+    int num_sections = 360;
+    float section_pixels = screen->width / camera->fov * section_deg;
+    float max_v_fov = 60.0f;
+
+    double theta = ceil(camera->fov * 0.5);
+    int num_sections_in_half_view = (int) ceil(theta / section_deg);
+
+    double current_view_deg = fmod(camera->transform.rotation * RAD2DEG, num_sections);
+    if (current_view_deg < 0.0) current_view_deg += 360;
+    current_view_deg = 360 - current_view_deg;
+
+    double current_view_fraction_deg = current_view_deg - (int) current_view_deg;
+
+    int central_section = (int) (current_view_deg / section_deg);
+
+    int section_from = mini(central_section - num_sections_in_half_view, central_section + num_sections_in_half_view);
+    int section_to = maxi(central_section + num_sections_in_half_view, central_section + num_sections_in_half_view);
+
+    int first_section_x_from = screen->width_2 - current_view_fraction_deg * section_pixels - num_sections_in_half_view * section_pixels;
+
+    for (int i = section_from, step = 0; i <= section_to; i++, step++) {
+        int section = i;
+        if (section < 0) section += num_sections;
+        if (section >= num_sections) section -= num_sections;
+
+        random_seed = section;
+
+        for (int s = 0; s < 100; s++) {
+            float x = renderer3d_random_float(0, (float) section_deg);
+            float y = renderer3d_random_float(-max_v_fov, max_v_fov);
+            uint8_t intensity = (uint8_t) renderer3d_random_float(1, 255);
+            float r_multiplier = renderer3d_random_float(0.8, 1.0);
+            float g_multiplier = renderer3d_random_float(0.8, 1.0);
+            float b_multiplier = renderer3d_random_float(0.8, 1.0);
+
+            if (y < -theta || y > theta) continue; // Outside the current fov
+
+            intensity *= remap(1.0, 30.0, 1.0, 0.4, camera->fov);
+
+            Col3i c = {
+                .r = intensity * r_multiplier,
+                .g = intensity * g_multiplier,
+                .b = intensity * b_multiplier,
+            };
+
+            int px = first_section_x_from + section_pixels * step + x * section_pixels;
+            int py = screen->height_2 + y * section_pixels;
+
+            if (px >= 0 && px < screen->width && py >= 0 && py < screen->height) {
+                pixel(screen, px, py) = col3i_to_uint32_t(c);
+            }
+        }
     }
 }
