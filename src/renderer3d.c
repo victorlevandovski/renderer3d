@@ -70,7 +70,7 @@ void renderer3d_compute_camera_transform(const Transform *world_transform, Trans
 static bool renderer3d_is_transformed_object_in_viewport(const Object* object, const Camera *camera)
 {
     // behind camera plane
-    if (object->camera_transform.position.y + object->radius < camera->near_plane)
+    if (object->camera_transform.position.y + object->radius * object->world_transform.scale < camera->near_plane)
         return false;
 
     // outside camera cone
@@ -78,7 +78,7 @@ static bool renderer3d_is_transformed_object_in_viewport(const Object* object, c
     double theta = fabs(camera->fov) * 0.5 * DEG2RAD;
     double d_camera = object->camera_transform.position.y * tan(theta);
     double d_mesh = (x - d_camera) * cos(theta);
-    if (d_mesh > object->radius)
+    if (d_mesh > object->radius * object->world_transform.scale)
         return false;
 
     return true;
@@ -544,11 +544,14 @@ static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *scr
 
 void renderer3d_compute_triangle_lighting(Triangle *triangle, const LightList *light_list)
 {
-    for (int l = 0; l < light_list->num_lights; l++) {
-        for (int v = 0; v < 3; v++) {
-            double angle = vec3_angle(light_list->lights[l]->normal, triangle->vertices[v].normal);
-            triangle->vertices[v].light = remap(0.0, M_PI_2, 1.0, 0.0, angle);
+    for (int v = 0; v < 3; v++) {
+        triangle->vertices[v].light = 0.0;
+        for (int l = 0; l < light_list->num_lights; l++) {
+            // ambient + light_intensity * max(0, triangle_normal * light_normal)
+            // ambient + light_intensity * pow((triangle_normal * light_normal + 1) * 0.5, 2); // softer + illuminated sides
+            triangle->vertices[v].light += light_list->lights[l]->normal.x * triangle->vertices[v].normal.x + light_list->lights[l]->normal.y * triangle->vertices[v].normal.y + light_list->lights[l]->normal.z * triangle->vertices[v].normal.z;
         }
+        triangle->vertices[v].light = clamp(triangle->vertices[v].light, 0.0, 1.0);
     }
 }
 
@@ -580,6 +583,7 @@ void renderer3d_render(const RenderList *render_list, LightList *light_list, Cam
     viewport_d = 1.0 / tan(camera->fov * DEG2RAD * 0.5);
     viewport_d *= screen->height_2;
 
+    // Calculate direct lights normals
     for (int l = 0; l < light_list->num_lights; l++) {
         renderer3d_compute_camera_transform(&light_list->lights[l]->world_transform, &light_list->lights[l]->camera_transform, camera);
         light_list->lights[l]->normal = (Vec3) {
