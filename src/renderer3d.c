@@ -158,7 +158,7 @@ int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_l
             // Early discard of triangles that point away from camera. The number might need tweaking.
             // Also it is possible to calculate the number per-mesh based on how far it is in front of a camera.
             // Far objects in the middle of the camera may use pretty aggressive values like 0.01-0.05
-            if (mesh->triangles_transformed[t].normal.y > 0.3)
+            if (mesh->triangles_transformed[t].normal.y > 0.5)
                 continue;
 
             // Finish the average normal rotation
@@ -176,24 +176,9 @@ int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_l
             }
 
             // todo: additionally check if mesh is fully in viewport to skip per-triangle check
-            if (!renderer3d_is_triangle_in_viewport(&mesh->triangles_transformed[t]))
-                continue;
-
-            // Same as quick discard, but the opposite.
-            // If a normal already looking in a general direction of a camera, we can quickly accept it.
-            // Number can be calculated per-mesh so it can be more aggressive for objects straight in front of camera.
-            if (mesh->triangles_transformed[t].normal.y > -0.5) {
-                Vec3 camera_normal = vec3_average(
-                    mesh->triangles_transformed[t].vertices[0].vertex,
-                    mesh->triangles_transformed[t].vertices[1].vertex,
-                    mesh->triangles_transformed[t].vertices[2].vertex
-                );
-
-                // Proper backface culling
-                if (vec3_angle(camera_normal, mesh->triangles_transformed[t].normal) <= M_PI_2) {
-                    continue;
-                }
-            }
+            // not sure if it helps at all
+            //if (!renderer3d_is_triangle_in_viewport(&mesh->triangles_transformed[t]))
+            //    continue;
 
             mesh->triangles_transformed[t].material = object_list->objects[o]->material;
 
@@ -468,9 +453,9 @@ static void renderer3d_calculate_triangle_mipmap_levels(Triangle *triangle)
 
 static void renderer3d_rasterize_triangle_shaded(Triangle *triangle, Screen *screen)
 {
-    triangle->area = renderer3d_area(triangle->vertices[0].vertex, triangle->vertices[1].vertex, triangle->vertices[2].vertex);
-    if (triangle->area < 0.0) return; // alternative backface culling
-
+    triangle->vertices[0].w_inv = 1.0 / triangle->vertices[0].vertex.z;
+    triangle->vertices[1].w_inv = 1.0 / triangle->vertices[1].vertex.z;
+    triangle->vertices[2].w_inv = 1.0 / triangle->vertices[2].vertex.z;
     triangle->w_inv_max = fmax(triangle->vertices[0].w_inv, fmax(triangle->vertices[1].w_inv, triangle->vertices[1].w_inv));
 
     Vec2 vertices[3];
@@ -564,7 +549,6 @@ void renderer3d_compute_triangle_for_rasterization(Triangle *triangle, Camera *c
         triangle->vertices[v].vertex.z = triangle->vertices[v].vertex.y; // used as w
         triangle->vertices[v].vertex.x = x_screen;
         triangle->vertices[v].vertex.y = y_screen;
-        triangle->vertices[v].w_inv = 1.0 / triangle->vertices[v].vertex.z;
     }
 }
 
@@ -594,8 +578,12 @@ void renderer3d_render(const RenderList *render_list, LightList *light_list, Cam
     }
 
     for (int i = 0; i < render_list->num_triangles; i++) {
-        renderer3d_compute_triangle_lighting(render_list->triangles[i], light_list);
         renderer3d_compute_triangle_for_rasterization(render_list->triangles[i], camera, screen);
+
+        render_list->triangles[i]->area = renderer3d_area(render_list->triangles[i]->vertices[0].vertex, render_list->triangles[i]->vertices[1].vertex, render_list->triangles[i]->vertices[2].vertex);
+        if (render_list->triangles[i]->area < 0.0) continue;
+
+        renderer3d_compute_triangle_lighting(render_list->triangles[i], light_list);
         renderer3d_render_triangle(render_list->triangles[i], screen);
     }
 
