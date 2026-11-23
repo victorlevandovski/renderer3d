@@ -138,7 +138,7 @@ Object* renderer3d_load_object(char* filename);
 
 void renderer3d_init(const Screen *screen);
 void renderer3d_compute_camera_transform(const Transform *world_transform, Transform *camera_transform, const Camera *camera);
-int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_list, Camera *camera);
+int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_list, Camera *camera, Screen *screen);
 void renderer3d_compute_triangle_lighting(Triangle *triangle, const LightList *light_list);
 void renderer3d_compute_triangle_for_rasterization(Triangle *triangle, Camera *camera, Screen *screen);
 void renderer3d_render_triangle(Triangle *triangle, Screen *screen);

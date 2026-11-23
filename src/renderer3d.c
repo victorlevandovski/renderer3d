@@ -110,25 +110,23 @@ static bool renderer3d_is_triangle_in_viewport(const Triangle *triangle)
         || is_outer_points_line_crossing_circle(triangle->vertices[0].vertex, triangle->vertices[2].vertex, radius);
 }
 
-static Mesh *renderer3d_select_lod_mesh(Object *object)
+static Mesh *renderer3d_select_lod_mesh(Object *object, Camera *camera, Screen *screen)
 {
     double distance = vec3_length(object->camera_transform.position);
-
-    if (distance < 1.0)
-        return object->meshes[0];
-
-    double apparent_size = object->radius * object->world_transform.scale / distance;
+    double radius = object->radius * object->world_transform.scale;
+    double angular_size = 2.0 * atan(radius / distance);
+    double size_pixels = (screen->width * angular_size) / (camera->fov * DEG2RAD);
 
     // Should be tweaked based on visuals
-    if (apparent_size < 0.01 && object->meshes[4] != NULL) return object->meshes[4];
-    if (apparent_size < 0.02 && object->meshes[3] != NULL) return object->meshes[3];
-    if (apparent_size < 0.04 && object->meshes[2] != NULL) return object->meshes[2];
-    if (apparent_size < 0.05 && object->meshes[1] != NULL) return object->meshes[1];
+    if (size_pixels < 16.0 && object->meshes[4] != NULL) return object->meshes[4];
+    if (size_pixels < 32.0 && object->meshes[3] != NULL) return object->meshes[3];
+    if (size_pixels < 64.0 && object->meshes[2] != NULL) return object->meshes[2];
+    if (size_pixels < 128.0 && object->meshes[1] != NULL) return object->meshes[1];
 
     return object->meshes[0];
 }
 
-int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_list, Camera *camera)
+int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_list, Camera *camera, Screen *screen)
 {
     int num_triangles = 0;
 
@@ -145,7 +143,7 @@ int renderer3d_compute_render_list(RenderList *render_list, ObjectList *object_l
         if (!renderer3d_is_transformed_object_in_viewport(object_list->objects[o], camera))
             continue;
 
-        Mesh *mesh = renderer3d_select_lod_mesh(object_list->objects[o]);
+        Mesh *mesh = renderer3d_select_lod_mesh(object_list->objects[o], camera, screen);
 
         double rotation_angle = object_list->objects[o]->world_transform.rotation - camera->transform.rotation;
         double rotation_sin = sin(rotation_angle);
